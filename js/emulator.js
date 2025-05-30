@@ -23,6 +23,7 @@ function detectBrowserCompatibility() {
     supportsFileAPI: !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
     supportsWebAssembly: typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function',
     supportsModules: 'noModule' in document.createElement('script'),
+    isWeChat: /MicroMessenger/i.test(ua),
     issues: []
   };
 
@@ -240,9 +241,15 @@ async function handleRomUpload(file) {
  * 设置DOM事件监听
  */
 function setupEventListeners() {
+  // 获取浏览器兼容性信息
+  const compatibility = detectBrowserCompatibility();
+  
   // 上传 ROM
   const romUpload = document.getElementById('rom-upload');
+  const emulatorContainer = document.getElementById('emulator-container');
+  
   if (romUpload) {
+    // 正常的文件上传事件
     romUpload.addEventListener('change', (event) => {
       if (event.target.files && event.target.files.length > 0) {
         handleRomUpload(event.target.files[0]);
@@ -250,6 +257,26 @@ function setupEventListeners() {
         console.warn('未选择文件或文件选择被取消');
       }
     });
+    
+    // 针对微信等环境，添加点击事件
+    if (compatibility.isWeChat || compatibility.isWebView) {
+      console.log('检测到微信或WebView环境，添加特殊处理');
+      
+      // 确保文件选择器可点击
+      romUpload.style.opacity = '0.01'; // 不要完全透明，以便微信能检测到点击
+      
+      // 添加点击事件到容器
+      emulatorContainer.addEventListener('click', () => {
+        console.log('模拟器容器被点击，尝试触发文件选择');
+        try {
+          // 尝试手动触发点击
+          romUpload.click();
+        } catch (err) {
+          console.error('无法触发文件选择:', err);
+          alert('在当前浏览器环境中无法选择文件，请尝试使用系统浏览器打开');
+        }
+      });
+    }
   } else {
     console.error('找不到ROM上传元素');
   }

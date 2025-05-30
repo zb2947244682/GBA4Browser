@@ -14,11 +14,22 @@ const originalConsole = {
   info: console.info
 };
 
+// 检查是否在微信环境中
+function isWeChatEnvironment() {
+  return /MicroMessenger/i.test(navigator.userAgent);
+}
+
 /**
  * 初始化日志系统
  */
 function initLogger() {
   try {
+    // 检查是否已经初始化
+    if (window._logContainer) {
+      console.log('日志系统已经初始化');
+      return;
+    }
+    
     // 创建日志容器
     const logContainer = document.createElement('div');
     logContainer.className = 'log-container';
@@ -46,7 +57,16 @@ function initLogger() {
         <button class="log-button" id="log-copy">复制日志</button>
       </div>
     `;
-    document.body.appendChild(logContainer);
+    
+    // 确保body已经加载完成
+    if (document.body) {
+      document.body.appendChild(logContainer);
+    } else {
+      // 如果body还没准备好，等待DOMContentLoaded事件
+      document.addEventListener('DOMContentLoaded', () => {
+        document.body.appendChild(logContainer);
+      });
+    }
 
     // 保存到全局变量，确保在模块加载失败时也能访问
     window._logContainer = logContainer;
@@ -237,6 +257,9 @@ function initLogger() {
         originalConsole.error('更新日志显示失败:', err);
       }
     }
+    
+    // 将updateLogDisplay暴露到全局作用域
+    window.updateLogDisplay = updateLogDisplay;
 
     // 显示日志
     window.showLogs = function() {

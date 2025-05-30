@@ -16,8 +16,28 @@
     window.showLogs = function() {
       if (window._logContainer) {
         window._logContainer.style.display = 'flex';
+        // 确保日志内容更新
+        if (typeof window.updateLogDisplay === 'function') {
+          window.updateLogDisplay();
+        }
       } else {
-        alert('日志系统尚未初始化');
+        // 尝试初始化日志系统
+        if (typeof window.initLogger === 'function') {
+          try {
+            window.initLogger();
+            setTimeout(function() {
+              if (window._logContainer) {
+                window._logContainer.style.display = 'flex';
+              } else {
+                alert('日志系统初始化失败');
+              }
+            }, 100);
+          } catch (err) {
+            alert('日志系统初始化失败: ' + err.message);
+          }
+        } else {
+          alert('日志系统尚未加载');
+        }
       }
     };
   </script>
