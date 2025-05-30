@@ -88,9 +88,10 @@ async function loadMGBA() {
       // 预加载WASM文件
       try {
         console.log('尝试预加载WASM文件');
-        const wasmResponse = await fetch('mgba.wasm', { 
+        const cacheBuster = new Date().getTime();
+        const wasmResponse = await fetch('mgba.wasm?' + cacheBuster, { 
           cache: 'no-store',  // 禁用缓存
-          headers: { 'Pragma': 'no-cache' }
+          headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
         });
         
         if (wasmResponse.ok) {
@@ -98,10 +99,12 @@ async function loadMGBA() {
           window.wasmBinary = wasmBuffer;
           console.log('WASM文件预加载成功，大小:', wasmBuffer.byteLength, '字节');
         } else {
-          console.error('WASM文件获取失败:', wasmResponse.status);
+          console.error('WASM文件获取失败:', wasmResponse.status, wasmResponse.statusText);
+          alert('WASM文件获取失败: ' + wasmResponse.status);
         }
       } catch (wasmErr) {
         console.error('预加载WASM文件失败:', wasmErr);
+        alert('预加载WASM文件失败: ' + wasmErr.message);
       }
       
       // 使用传统方式加载JS
@@ -112,7 +115,7 @@ async function loadMGBA() {
         window.Module = {
           locateFile: function(path) {
             console.log('请求文件:', path);
-            return path;
+            return path + '?' + new Date().getTime(); // 添加时间戳避免缓存
           },
           print: function(text) { 
             console.log('[mGBA]', text); 
@@ -125,6 +128,8 @@ async function loadMGBA() {
           onRuntimeInitialized: function() {
             console.log('mGBA运行时初始化完成');
             if (window.Module) {
+              console.log('Module对象可用，包含属性:', Object.keys(window.Module).join(', '));
+              
               // 添加必要的方法
               if (!window.Module.uploadRom && window.Module.FS) {
                 window.Module.uploadRom = function(file, callback) {
@@ -186,6 +191,12 @@ async function loadMGBA() {
                 };
               }
               
+              // 更新版本标签
+              const versionTag = document.getElementById('version-tag');
+              if (versionTag) {
+                versionTag.style.backgroundColor = 'rgba(0, 128, 0, 0.7)'; // 成功后变为绿色
+              }
+              
               resolve({ default: function() { return window.Module; } });
             } else {
               reject(new Error('mGBA模块初始化失败'));
@@ -198,10 +209,15 @@ async function loadMGBA() {
         };
         
         const script = document.createElement('script');
-        script.src = 'mgba.js?' + new Date().getTime(); // 添加时间戳避免缓存
+        const cacheBuster = new Date().getTime();
+        script.src = 'mgba.js?' + cacheBuster; // 添加时间戳避免缓存
         script.async = true;
+        script.onload = function() {
+          console.log('mgba.js脚本加载完成，等待初始化...');
+        };
         script.onerror = function(err) {
           console.error('加载mGBA脚本失败:', err);
+          alert('加载mGBA脚本失败，请刷新页面重试');
           reject(new Error('加载mGBA脚本失败'));
         };
         document.head.appendChild(script);
@@ -210,9 +226,10 @@ async function loadMGBA() {
         setTimeout(() => {
           if (!window.Module || !window.Module.FS) {
             console.error('mGBA模块加载超时');
+            alert('mGBA模块加载超时，请刷新页面重试');
             reject(new Error('mGBA模块加载超时'));
           }
-        }, 15000); // 延长超时时间
+        }, 20000); // 延长超时时间到20秒
       });
     }
     
