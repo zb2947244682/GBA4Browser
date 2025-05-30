@@ -7,7 +7,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 if __name__ == '__main__':
-    server_address = ('', 8000)
+    server_address = ('', 5586)
     httpd = HTTPServer(server_address, CustomHandler)
-    print("服务器运行在 http://localhost:8000")
+    print("服务器运行在 http://localhost:5586")
     httpd.serve_forever()

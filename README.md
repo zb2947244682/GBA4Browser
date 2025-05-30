@@ -27,8 +27,8 @@
 1. 克隆本仓库：
 
 ```bash
-git clone https://github.com/yourusername/mgba-web.git
-cd mgba-web
+git clone https://github.com/zb2947244682/GBA4Browser
+cd GBA4Browser
 ```
 
 2. 启动本地服务器：
@@ -40,7 +40,7 @@ python server.py
 3. 在浏览器中访问：
 
 ```
-http://localhost:8000
+http://localhost:5586
 ```
 
 ## Docker 部署
