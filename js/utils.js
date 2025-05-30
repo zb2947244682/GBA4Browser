@@ -3,9 +3,9 @@
  */
 
 // XLSX相关功能
-var gk_isXlsx = false;
-var gk_xlsxFileLookup = {};
-var gk_fileData = {};
+const gk_isXlsx = false;
+const gk_xlsxFileLookup = {};
+const gk_fileData = {};
 
 /**
  * 检查单元格是否有内容
@@ -52,4 +52,7 @@ function loadFileData(filename) {
     }
   }
   return gk_fileData[filename] || "";
-} 
+}
+
+// 导出函数和变量
+export { filledCell, loadFileData, gk_isXlsx, gk_xlsxFileLookup, gk_fileData }; 

@@ -3,9 +3,67 @@
  */
 import { setupKeyboardControls } from './controls.js';
 import { saveState, loadState } from './saveload.js';
+import { initLogger } from './logger.js';
 
 // 模拟器模块
 let module;
+
+/**
+ * 检测浏览器兼容性
+ * @returns {Object} 兼容性信息
+ */
+function detectBrowserCompatibility() {
+  const ua = navigator.userAgent;
+  const browserInfo = {
+    isCompatible: true,
+    browser: 'unknown',
+    isWebView: false,
+    isMobile: /Mobile|Android|iPhone|iPad|iPod/i.test(ua),
+    supportsFileAPI: !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
+    supportsWebAssembly: typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function',
+    issues: []
+  };
+
+  // 检测浏览器类型
+  if (/MicroMessenger/i.test(ua)) {
+    browserInfo.browser = 'WeChat';
+    browserInfo.isWebView = true;
+  } else if (/QQBrowser/i.test(ua)) {
+    browserInfo.browser = 'QQ Browser';
+  } else if (/UCBrowser/i.test(ua)) {
+    browserInfo.browser = 'UC Browser';
+  } else if (/Edg/i.test(ua)) {
+    browserInfo.browser = 'Edge';
+  } else if (/Chrome/i.test(ua)) {
+    browserInfo.browser = 'Chrome';
+  } else if (/Firefox/i.test(ua)) {
+    browserInfo.browser = 'Firefox';
+  } else if (/Safari/i.test(ua)) {
+    browserInfo.browser = 'Safari';
+  }
+
+  // 检测WebView
+  if (/Android/i.test(ua) && /Version\//i.test(ua) && !(/Chrome/i.test(ua))) {
+    browserInfo.isWebView = true;
+  }
+
+  // 检查File API支持
+  if (!browserInfo.supportsFileAPI) {
+    browserInfo.isCompatible = false;
+    browserInfo.issues.push('浏览器不支持文件API，无法上传ROM');
+  }
+
+  // 检查WebAssembly支持
+  if (!browserInfo.supportsWebAssembly) {
+    browserInfo.isCompatible = false;
+    browserInfo.issues.push('浏览器不支持WebAssembly，无法运行模拟器');
+  }
+
+  // 记录浏览器信息
+  console.info('浏览器信息:', JSON.stringify(browserInfo, null, 2));
+  
+  return browserInfo;
+}
 
 /**
  * 初始化模拟器
@@ -14,6 +72,19 @@ let module;
 async function initEmulator() {
   try {
     console.log('正在初始化模拟器...');
+    
+    // 检测浏览器兼容性
+    const compatibility = detectBrowserCompatibility();
+    if (!compatibility.isCompatible) {
+      console.error('浏览器兼容性问题:', compatibility.issues.join(', '));
+      document.querySelector('.upload-text').textContent = '您的浏览器不兼容，请尝试使用Chrome或Edge浏览器';
+      return null;
+    }
+    
+    if (compatibility.isWebView) {
+      console.warn('检测到WebView环境，部分功能可能受限');
+      document.querySelector('.upload-text').textContent = '在微信等应用内浏览器中，文件上传功能可能受限，建议使用系统浏览器';
+    }
     
     // 导入mGBA模块
     const mGBA = await import('../mgba.js');
@@ -77,8 +148,10 @@ async function handleRomUpload(file) {
   }
 
   try {
+    console.log('开始上传ROM:', file.name, '大小:', file.size, '字节');
     await module.uploadRom(file, () => {
       const romPath = `/data/games/${file.name}`;
+      console.log('ROM上传完成，准备加载游戏:', romPath);
       if (module.loadGame(romPath)) {
         module.resumeGame();
         console.log('ROM 加载成功:', romPath);
@@ -112,8 +185,21 @@ function init() {
   document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM加载完成，准备初始化模拟器...');
     
+    // 初始化日志系统
+    initLogger();
+    
     // 设置事件监听
     setupEventListeners();
+    
+    // 记录系统信息
+    console.info('系统信息:', {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      vendor: navigator.vendor,
+      language: navigator.language,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      devicePixelRatio: window.devicePixelRatio
+    });
     
     // 延迟一点初始化，确保页面完全加载
     setTimeout(() => {
