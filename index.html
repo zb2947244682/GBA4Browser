@@ -6,6 +6,9 @@
   <title>mGBA 模拟器</title>
   <link rel="stylesheet" href="css/styles.css">
   <script>
+    // 版本信息
+    window.APP_VERSION = "v1.2.0"; // 每次更新时修改此版本号
+    
     // 全局错误处理
     window.onerror = function(message, source, lineno, colno, error) {
       console.error('全局错误: ' + message);
@@ -328,14 +331,28 @@
         var logContainer = createLogContainer();
         bindLogEvents(logContainer);
         console.log('内联日志系统已自动初始化');
+        initVersionTag();
       } else {
         document.addEventListener('DOMContentLoaded', function() {
           var logContainer = createLogContainer();
           bindLogEvents(logContainer);
           console.log('内联日志系统已自动初始化');
+          initVersionTag();
         });
       }
     })();
+    
+    // 初始化版本标签
+    function initVersionTag() {
+      var versionTag = document.getElementById('version-tag');
+      if (versionTag) {
+        versionTag.textContent = window.APP_VERSION || 'v1.0.0';
+        
+        // 添加时间戳，确保每次刷新都能看到变化
+        var timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        versionTag.setAttribute('data-timestamp', timestamp);
+      }
+    }
   </script>
 </head>
 <body>
@@ -346,6 +363,8 @@
       <!-- 微信专用文件上传控件 -->
       <input type="file" id="wechat-rom-upload" accept="*" style="display: none;">
       <div class="upload-text">点击屏幕上传ROM</div>
+      <!-- 版本标签 -->
+      <div id="version-tag"></div>
     </div>
     
     <div class="controls-area">
