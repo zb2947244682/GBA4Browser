@@ -13,6 +13,60 @@
       return true;
     };
     
+    // 显示调试信息
+    window.showDebugInfo = function() {
+      try {
+        var debugInfo = {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          vendor: navigator.vendor,
+          language: navigator.language,
+          screenSize: window.screen.width + 'x' + window.screen.height,
+          devicePixelRatio: window.devicePixelRatio,
+          isWeChat: /MicroMessenger/i.test(navigator.userAgent),
+          moduleLoaded: !!window.module,
+          canvasReady: !!document.getElementById('gba-canvas'),
+          loggerReady: !!window._logContainer,
+          wasmBinaryLoaded: !!window.wasmBinary,
+          moduleProperties: window.module ? Object.keys(window.module) : []
+        };
+        
+        var debugText = JSON.stringify(debugInfo, null, 2);
+        console.log('调试信息:', debugInfo);
+        
+        // 显示调试信息
+        var debugAlert = '调试信息:\n\n';
+        for (var key in debugInfo) {
+          if (key === 'moduleProperties') {
+            debugAlert += key + ': ' + debugInfo[key].join(', ') + '\n';
+          } else {
+            debugAlert += key + ': ' + debugInfo[key] + '\n';
+          }
+        }
+        
+        alert(debugAlert);
+        
+        // 尝试获取更多模块信息
+        if (window.module) {
+          try {
+            var moduleInfo = {
+              hasUploadRom: typeof window.module.uploadRom === 'function',
+              hasLoadGame: typeof window.module.loadGame === 'function',
+              hasResumeGame: typeof window.module.resumeGame === 'function',
+              hasFSInit: typeof window.module.FSInit === 'function',
+              hasButtonPress: typeof window.module.buttonPress === 'function'
+            };
+            
+            console.log('模块信息:', moduleInfo);
+          } catch (err) {
+            console.error('获取模块信息失败:', err);
+          }
+        }
+      } catch (err) {
+        alert('获取调试信息失败: ' + err.message);
+      }
+    };
+    
     // 内联日志系统（确保在微信环境中可用）
     (function() {
       // 创建日志容器
@@ -55,35 +109,7 @@
         }
         
         window._logContainer = logContainer;
-        window._logs = [];
-        
-        // 添加事件处理
-        document.addEventListener('DOMContentLoaded', function() {
-          logContainer.querySelector('.log-close').addEventListener('click', function() {
-            logContainer.style.display = 'none';
-          });
-          
-          logContainer.querySelector('#log-clear').addEventListener('click', function() {
-            window._logs = [];
-            updateLogDisplay();
-          });
-          
-          logContainer.querySelector('#log-copy').addEventListener('click', function() {
-            var logText = window._logs.map(function(log) {
-              return '[' + log.timestamp + '][' + log.type + '] ' + log.message;
-            }).join('\n');
-            
-            var textarea = document.createElement('textarea');
-            textarea.value = logText;
-            textarea.style.position = 'fixed';
-            textarea.style.left = '-9999px';
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            alert('日志已复制到剪贴板');
-          });
-        });
+        window._logs = window._logs || [];
         
         return logContainer;
       }
@@ -227,19 +253,88 @@
         var logContainer = createLogContainer();
         logContainer.style.display = 'flex';
         updateLogDisplay();
+        
+        // 确保事件监听器已绑定
+        bindLogEvents(logContainer);
       };
+      
+      // 绑定日志事件
+      function bindLogEvents(logContainer) {
+        if (!logContainer) return;
+        
+        // 移除旧的事件监听器（如果有）
+        var closeBtn = logContainer.querySelector('.log-close');
+        var clearBtn = logContainer.querySelector('#log-clear');
+        var copyBtn = logContainer.querySelector('#log-copy');
+        
+        if (closeBtn) {
+          var newCloseBtn = closeBtn.cloneNode(true);
+          closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+          newCloseBtn.addEventListener('click', function() {
+            logContainer.style.display = 'none';
+            console.log('日志面板已关闭');
+          });
+        }
+        
+        if (clearBtn) {
+          var newClearBtn = clearBtn.cloneNode(true);
+          clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+          newClearBtn.addEventListener('click', function() {
+            window._logs = [];
+            updateLogDisplay();
+            console.log('日志已清除');
+          });
+        }
+        
+        if (copyBtn) {
+          var newCopyBtn = copyBtn.cloneNode(true);
+          copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+          newCopyBtn.addEventListener('click', function() {
+            try {
+              var logText = window._logs.map(function(log) {
+                return '[' + log.timestamp + '][' + log.type + '] ' + log.message;
+              }).join('\n');
+              
+              var textarea = document.createElement('textarea');
+              textarea.value = logText;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-9999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              var successful = document.execCommand('copy');
+              document.body.removeChild(textarea);
+              
+              if (successful) {
+                alert('日志已复制到剪贴板');
+              } else {
+                alert('复制失败，可能是浏览器不支持');
+              }
+            } catch (err) {
+              alert('复制日志失败: ' + err.message);
+            }
+          });
+        }
+      }
       
       window.updateLogDisplay = updateLogDisplay;
       window.initLogger = function() {
-        createLogContainer();
+        var logContainer = createLogContainer();
+        bindLogEvents(logContainer);
         console.log('内联日志系统初始化完成');
       };
       
       // 自动初始化
-      document.addEventListener('DOMContentLoaded', function() {
-        createLogContainer();
+      if (document.body) {
+        var logContainer = createLogContainer();
+        bindLogEvents(logContainer);
         console.log('内联日志系统已自动初始化');
-      });
+      } else {
+        document.addEventListener('DOMContentLoaded', function() {
+          var logContainer = createLogContainer();
+          bindLogEvents(logContainer);
+          console.log('内联日志系统已自动初始化');
+        });
+      }
     })();
   </script>
 </head>
@@ -296,6 +391,10 @@
       <div class="function-button" onclick="showLogs()">
         <div class="function-icon">📋</div>
         <div>日志</div>
+      </div>
+      <div class="function-button" onclick="showDebugInfo()">
+        <div class="function-icon">🔍</div>
+        <div>调试</div>
       </div>
     </div>
   </div>
