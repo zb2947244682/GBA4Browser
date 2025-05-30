@@ -81,23 +81,74 @@ async function loadMGBA() {
     // 检查是否在微信环境中
     const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
     
-    // 在微信环境中预加载WASM文件
+    // 在微信环境中使用传统方式加载
     if (isWeChat) {
-      console.log('微信环境：预加载WASM文件');
+      console.log('微信环境：使用传统方式加载模块');
+      
+      // 预加载WASM文件
       try {
-        // 预加载WASM文件
-        const wasmFetch = fetch('mgba.wasm');
-        console.log('WASM文件请求已发送');
-        
-        // 设置全局变量，以便mgba.js可以使用
-        window.wasmBinary = await (await wasmFetch).arrayBuffer();
-        console.log('WASM文件预加载完成，大小:', window.wasmBinary.byteLength, '字节');
+        console.log('尝试预加载WASM文件');
+        const wasmResponse = await fetch('mgba.wasm');
+        if (wasmResponse.ok) {
+          const wasmBuffer = await wasmResponse.arrayBuffer();
+          window.wasmBinary = wasmBuffer;
+          console.log('WASM文件预加载成功，大小:', wasmBuffer.byteLength, '字节');
+        } else {
+          console.error('WASM文件获取失败:', wasmResponse.status);
+        }
       } catch (wasmErr) {
         console.error('预加载WASM文件失败:', wasmErr);
       }
+      
+      // 使用传统方式加载JS
+      return new Promise((resolve, reject) => {
+        console.log('使用脚本标签加载mGBA模块');
+        
+        // 创建全局变量，以便脚本加载后可以访问
+        window.Module = {
+          locateFile: function(path) {
+            console.log('请求文件:', path);
+            return path;
+          },
+          print: function(text) { 
+            console.log('[mGBA]', text); 
+          },
+          printErr: function(text) { 
+            console.error('[mGBA]', text); 
+          },
+          canvas: document.getElementById('gba-canvas'),
+          onRuntimeInitialized: function() {
+            console.log('mGBA运行时初始化完成');
+            if (window.Module) {
+              resolve({ default: function() { return window.Module; } });
+            }
+          },
+          onAbort: function(reason) {
+            console.error('mGBA模块加载中止:', reason);
+            reject(new Error('模块加载中止: ' + reason));
+          }
+        };
+        
+        const script = document.createElement('script');
+        script.src = 'mgba.js';
+        script.async = true;
+        script.onerror = function(err) {
+          console.error('加载mGBA脚本失败:', err);
+          reject(new Error('加载mGBA脚本失败'));
+        };
+        document.head.appendChild(script);
+        
+        // 设置超时
+        setTimeout(() => {
+          if (!window.Module || !window.Module.FS) {
+            console.error('mGBA模块加载超时');
+            reject(new Error('mGBA模块加载超时'));
+          }
+        }, 10000);
+      });
     }
     
-    // 尝试使用动态导入
+    // 非微信环境尝试使用动态导入
     try {
       console.log('尝试使用ES模块导入mGBA');
       mGBA = await import('../mgba.js');
@@ -151,9 +202,21 @@ async function initEmulator() {
       document.querySelector('.upload-text').textContent = '在微信等应用内浏览器中，文件上传功能可能受限，建议使用系统浏览器';
     }
     
+    // 添加错误处理
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error('全局错误:', message, source, lineno, colno);
+      if (compatibility.isWeChat) {
+        // 在微信环境中显示错误信息
+        document.querySelector('.upload-text').textContent = `错误: ${message}`;
+        document.querySelector('.upload-text').style.display = 'block';
+      }
+      return true;
+    };
+    
     // 加载mGBA模块
     try {
       mGBA = await loadMGBA();
+      console.log('mGBA模块加载成功');
     } catch (err) {
       console.error('加载mGBA模块失败:', err.message);
       document.querySelector('.upload-text').textContent = '模拟器加载失败，请刷新页面重试';
@@ -162,32 +225,38 @@ async function initEmulator() {
     
     // 初始化模拟器
     try {
-      // 添加错误处理
-      window.onerror = function(message, source, lineno, colno, error) {
-        console.error('全局错误:', message, source, lineno, colno);
-        if (compatibility.isWeChat) {
-          // 在微信环境中显示错误信息
-          document.querySelector('.upload-text').textContent = `错误: ${message}`;
-          document.querySelector('.upload-text').style.display = 'block';
+      // 微信环境特殊处理
+      if (compatibility.isWeChat) {
+        console.log('微信环境：使用特殊方式初始化模块');
+        
+        if (window.Module) {
+          module = window.Module;
+          console.log('使用全局Module对象');
+        } else if (typeof mGBA.default === 'function') {
+          module = await mGBA.default();
+          console.log('使用mGBA.default()初始化模块');
+        } else {
+          console.error('无法初始化模块：找不到合适的初始化方法');
+          document.querySelector('.upload-text').textContent = '模拟器初始化失败：无法找到初始化方法';
+          return null;
         }
-        return true;
-      };
-      
-      // 设置WASM加载路径
-      if (typeof mGBA.default === 'function') {
-        module = await mGBA.default({
-          canvas: document.getElementById('gba-canvas'),
-          print: function(text) { console.log('[mGBA]', text); },
-          printErr: function(text) { console.error('[mGBA]', text); },
-          locateFile: function(path) {
-            console.log('正在加载文件:', path);
-            return path;
-          }
-        });
       } else {
-        console.error('mGBA模块格式不正确');
-        document.querySelector('.upload-text').textContent = 'mGBA模块格式不正确，请刷新页面重试';
-        return null;
+        // 非微信环境
+        if (typeof mGBA.default === 'function') {
+          module = await mGBA.default({
+            canvas: document.getElementById('gba-canvas'),
+            print: function(text) { console.log('[mGBA]', text); },
+            printErr: function(text) { console.error('[mGBA]', text); },
+            locateFile: function(path) {
+              console.log('正在加载文件:', path);
+              return path;
+            }
+          });
+        } else {
+          console.error('mGBA模块格式不正确');
+          document.querySelector('.upload-text').textContent = 'mGBA模块格式不正确，请刷新页面重试';
+          return null;
+        }
       }
     } catch (err) {
       console.error('初始化模拟器实例失败:', err.message);
@@ -202,8 +271,23 @@ async function initEmulator() {
       if (typeof module.FSInit === 'function') {
         await module.FSInit();
         console.log('文件系统初始化完成');
+      } else if (module.FS) {
+        console.log('文件系统已存在，无需初始化');
+        
+        // 创建必要的目录
+        try {
+          if (!module.FS.analyzePath('/data', true).exists) {
+            module.FS.mkdir('/data');
+          }
+          if (!module.FS.analyzePath('/data/games', true).exists) {
+            module.FS.mkdir('/data/games');
+          }
+          console.log('创建必要的目录结构完成');
+        } catch (fsErr) {
+          console.warn('创建目录结构时出错:', fsErr);
+        }
       } else {
-        console.warn('模块没有FSInit方法，尝试继续');
+        console.warn('模块没有FSInit方法或FS对象，尝试继续');
       }
     } catch (err) {
       console.error('文件系统初始化失败:', err.message);
@@ -272,25 +356,111 @@ async function handleRomUpload(file) {
     }
   }
 
-  // 确保模块存在并且有uploadRom方法
-  if (!module || typeof module.uploadRom !== 'function') {
+  // 确保模块存在
+  if (!module) {
     console.error('模拟器模块未正确加载，请刷新页面重试');
     return;
   }
 
   try {
     console.log('开始上传ROM:', file.name, '大小:', file.size, '字节');
-    await module.uploadRom(file, () => {
-      const romPath = `/data/games/${file.name}`;
-      console.log('ROM上传完成，准备加载游戏:', romPath);
-      if (module.loadGame(romPath)) {
-        module.resumeGame();
-        console.log('ROM 加载成功:', romPath);
+    
+    // 微信环境特殊处理
+    if (isWeChat) {
+      console.log('微信环境：使用特殊方式加载ROM');
+      
+      // 读取文件内容
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const arrayBuffer = e.target.result;
+          console.log('ROM文件读取成功，大小:', arrayBuffer.byteLength, '字节');
+          
+          // 确保FS存在
+          if (!module.FS) {
+            console.error('模块没有FS对象，无法加载ROM');
+            alert('模拟器未完全初始化，无法加载ROM');
+            return;
+          }
+          
+          // 确保目录存在
+          try {
+            if (!module.FS.analyzePath('/data', true).exists) {
+              module.FS.mkdir('/data');
+            }
+            if (!module.FS.analyzePath('/data/games', true).exists) {
+              module.FS.mkdir('/data/games');
+            }
+          } catch (fsErr) {
+            console.warn('创建目录结构时出错:', fsErr);
+          }
+          
+          // 写入文件
+          const romPath = `/data/games/${file.name}`;
+          try {
+            // 将ArrayBuffer转换为Uint8Array
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            // 写入文件
+            module.FS.writeFile(romPath, uint8Array);
+            console.log('ROM文件写入成功:', romPath);
+            
+            // 加载游戏
+            if (typeof module.loadGame === 'function') {
+              if (module.loadGame(romPath)) {
+                console.log('ROM加载成功');
+                
+                // 启动游戏
+                if (typeof module.resumeGame === 'function') {
+                  module.resumeGame();
+                  console.log('游戏已启动');
+                } else {
+                  console.warn('模块没有resumeGame方法');
+                }
+              } else {
+                console.error('ROM加载失败');
+                alert('ROM加载失败，可能是不支持的格式');
+              }
+            } else {
+              console.error('模块没有loadGame方法');
+              alert('模拟器未完全初始化，无法加载游戏');
+            }
+          } catch (writeErr) {
+            console.error('写入ROM文件失败:', writeErr);
+            alert('写入ROM文件失败: ' + writeErr.message);
+          }
+        } catch (err) {
+          console.error('处理ROM文件失败:', err);
+          alert('处理ROM文件失败: ' + err.message);
+        }
+      };
+      
+      reader.onerror = function(err) {
+        console.error('读取ROM文件失败:', err);
+        alert('读取ROM文件失败');
+      };
+      
+      // 开始读取文件
+      reader.readAsArrayBuffer(file);
+    } else {
+      // 非微信环境，使用正常方式
+      if (typeof module.uploadRom === 'function') {
+        await module.uploadRom(file, () => {
+          const romPath = `/data/games/${file.name}`;
+          console.log('ROM上传完成，准备加载游戏:', romPath);
+          if (module.loadGame(romPath)) {
+            module.resumeGame();
+            console.log('ROM 加载成功:', romPath);
+          } else {
+            console.error('ROM 加载失败');
+            alert('ROM 加载失败，可能是不支持的格式或文件损坏');
+          }
+        });
       } else {
-        console.error('ROM 加载失败');
-        alert('ROM 加载失败，可能是不支持的格式或文件损坏');
+        console.error('模块没有uploadRom方法');
+        alert('模拟器未完全初始化，无法上传ROM');
       }
-    });
+    }
   } catch (err) {
     console.error('ROM 上传失败:', err);
     alert('ROM 上传失败: ' + (err.message || '未知错误'));
