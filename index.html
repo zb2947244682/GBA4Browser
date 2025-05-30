@@ -5,6 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mGBA 模拟器</title>
   <link rel="stylesheet" href="css/styles.css">
+  <script>
+    // 全局错误处理
+    window.onerror = function(message, source, lineno, colno, error) {
+      alert('全局错误: ' + message);
+      return true;
+    };
+    
+    // 确保showLogs函数在模块加载前可用
+    window.showLogs = function() {
+      if (window._logContainer) {
+        window._logContainer.style.display = 'flex';
+      } else {
+        alert('日志系统尚未初始化');
+      }
+    };
+  </script>
 </head>
 <body>
   <div class="gameboy">
@@ -62,5 +78,79 @@
   </div>
 
   <script type="module" src="js/main.js"></script>
+  <script>
+    // 用于兼容不支持ES模块的浏览器
+    function fallbackLoad() {
+      if (!window.module) {
+        console.warn('ES模块加载可能失败，尝试使用传统脚本加载');
+        
+        // 加载工具函数
+        var utilsScript = document.createElement('script');
+        utilsScript.src = 'js/utils-fallback.js';
+        document.head.appendChild(utilsScript);
+        
+        // 加载控制器函数
+        var controlsScript = document.createElement('script');
+        controlsScript.src = 'js/controls-fallback.js';
+        document.head.appendChild(controlsScript);
+        
+        // 加载日志系统
+        var loggerScript = document.createElement('script');
+        loggerScript.src = 'js/logger-fallback.js';
+        document.head.appendChild(loggerScript);
+        
+        // 加载存档功能
+        var saveloadScript = document.createElement('script');
+        saveloadScript.src = 'js/saveload-fallback.js';
+        document.head.appendChild(saveloadScript);
+        
+        // 加载模拟器
+        var emulatorScript = document.createElement('script');
+        emulatorScript.src = 'js/emulator-fallback.js';
+        document.head.appendChild(emulatorScript);
+      }
+    }
+    
+    // 5秒后检查模块是否加载成功
+    setTimeout(fallbackLoad, 5000);
+    
+    // 定义全局按钮函数，以防模块加载失败
+    function pressButton(button) {
+      if (window.module) {
+        window.module.buttonPress(button);
+      } else {
+        console.warn('模拟器模块未加载，按钮操作无效');
+      }
+    }
+    
+    function releaseButton(button) {
+      if (window.module) {
+        window.module.buttonUnpress(button);
+      }
+    }
+    
+    function saveState() {
+      if (window.module) {
+        if (window.module.saveStateSlot) {
+          window.module.saveStateSlot(1);
+          if (window.module.FSSync) {
+            window.module.FSSync();
+          }
+        }
+      } else {
+        alert('模拟器未加载，无法保存存档');
+      }
+    }
+    
+    function loadState() {
+      if (window.module) {
+        if (window.module.loadStateSlot) {
+          window.module.loadStateSlot(1);
+        }
+      } else {
+        alert('模拟器未加载，无法加载存档');
+      }
+    }
+  </script>
 </body>
 </html>

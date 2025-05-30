@@ -7,6 +7,7 @@ import { initLogger } from './logger.js';
 
 // 模拟器模块
 let module;
+let mGBA;
 
 /**
  * 检测浏览器兼容性
@@ -21,6 +22,7 @@ function detectBrowserCompatibility() {
     isMobile: /Mobile|Android|iPhone|iPad|iPod/i.test(ua),
     supportsFileAPI: !!window.File && !!window.FileReader && !!window.FileList && !!window.Blob,
     supportsWebAssembly: typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function',
+    supportsModules: 'noModule' in document.createElement('script'),
     issues: []
   };
 
@@ -32,6 +34,8 @@ function detectBrowserCompatibility() {
     browserInfo.browser = 'QQ Browser';
   } else if (/UCBrowser/i.test(ua)) {
     browserInfo.browser = 'UC Browser';
+  } else if (/VIA/i.test(ua)) {
+    browserInfo.browser = 'VIA Browser';
   } else if (/Edg/i.test(ua)) {
     browserInfo.browser = 'Edge';
   } else if (/Chrome/i.test(ua)) {
@@ -66,6 +70,46 @@ function detectBrowserCompatibility() {
 }
 
 /**
+ * 加载mGBA模块
+ * @returns {Promise<Object>} mGBA模块
+ */
+async function loadMGBA() {
+  try {
+    console.log('开始加载mGBA模块...');
+    
+    // 尝试使用动态导入
+    try {
+      mGBA = await import('../mgba.js');
+      console.log('mGBA模块通过ES模块导入成功');
+      return mGBA;
+    } catch (importErr) {
+      console.warn('ES模块导入失败，尝试使用传统方式加载:', importErr.message);
+      
+      // 如果动态导入失败，尝试使用传统方式加载
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '../mgba.js';
+        script.onload = () => {
+          if (window.mGBA) {
+            console.log('mGBA模块通过脚本标签加载成功');
+            resolve(window.mGBA);
+          } else {
+            reject(new Error('mGBA模块加载成功但未找到全局变量'));
+          }
+        };
+        script.onerror = (err) => {
+          reject(new Error('加载mGBA脚本失败: ' + err.message));
+        };
+        document.head.appendChild(script);
+      });
+    }
+  } catch (err) {
+    console.error('加载mGBA模块失败:', err.message);
+    throw err;
+  }
+}
+
+/**
  * 初始化模拟器
  * @returns {Promise<void>}
  */
@@ -86,20 +130,39 @@ async function initEmulator() {
       document.querySelector('.upload-text').textContent = '在微信等应用内浏览器中，文件上传功能可能受限，建议使用系统浏览器';
     }
     
-    // 导入mGBA模块
-    const mGBA = await import('../mgba.js');
+    // 加载mGBA模块
+    try {
+      mGBA = await loadMGBA();
+    } catch (err) {
+      console.error('加载mGBA模块失败:', err.message);
+      document.querySelector('.upload-text').textContent = '模拟器加载失败，请刷新页面重试';
+      throw err;
+    }
     
-    module = await mGBA.default({
-      canvas: document.getElementById('gba-canvas'),
-      print: console.log,
-      printErr: console.error
-    });
+    // 初始化模拟器
+    try {
+      module = await mGBA.default({
+        canvas: document.getElementById('gba-canvas'),
+        print: console.log,
+        printErr: console.error
+      });
+    } catch (err) {
+      console.error('初始化模拟器实例失败:', err.message);
+      document.querySelector('.upload-text').textContent = '模拟器初始化失败，请刷新页面重试';
+      throw err;
+    }
 
     console.log('模拟器基础初始化完成，正在设置文件系统...');
     
     // 初始化文件系统
-    await module.FSInit();
-    console.log('文件系统初始化完成');
+    try {
+      await module.FSInit();
+      console.log('文件系统初始化完成');
+    } catch (err) {
+      console.error('文件系统初始化失败:', err.message);
+      document.querySelector('.upload-text').textContent = '文件系统初始化失败，请刷新页面重试';
+      throw err;
+    }
 
     // 设置按键映射
     setupKeyboardControls(module);
@@ -125,7 +188,10 @@ async function initEmulator() {
  * @returns {Promise<void>}
  */
 async function handleRomUpload(file) {
-  if (!file) return;
+  if (!file) {
+    console.warn('没有选择文件');
+    return;
+  }
 
   // 隐藏上传文字
   document.querySelector('.upload-text').style.display = 'none';
@@ -135,6 +201,12 @@ async function handleRomUpload(file) {
     try {
       console.log('模拟器未初始化，正在初始化...');
       await initEmulator();
+      
+      // 如果初始化后模块仍不存在，则退出
+      if (!module) {
+        console.error('模拟器初始化后模块仍不存在');
+        return;
+      }
     } catch (err) {
       console.error('模拟器初始化失败:', err);
       return;
@@ -169,9 +241,18 @@ async function handleRomUpload(file) {
  */
 function setupEventListeners() {
   // 上传 ROM
-  document.getElementById('rom-upload').addEventListener('change', (event) => {
-    handleRomUpload(event.target.files[0]);
-  });
+  const romUpload = document.getElementById('rom-upload');
+  if (romUpload) {
+    romUpload.addEventListener('change', (event) => {
+      if (event.target.files && event.target.files.length > 0) {
+        handleRomUpload(event.target.files[0]);
+      } else {
+        console.warn('未选择文件或文件选择被取消');
+      }
+    });
+  } else {
+    console.error('找不到ROM上传元素');
+  }
 
   // 将存档和读档函数暴露到全局作用域
   window.saveState = saveState;
@@ -186,10 +267,20 @@ function init() {
     console.log('DOM加载完成，准备初始化模拟器...');
     
     // 初始化日志系统
-    initLogger();
+    try {
+      initLogger();
+      console.log('日志系统初始化完成');
+    } catch (err) {
+      console.error('日志系统初始化失败:', err);
+    }
     
     // 设置事件监听
-    setupEventListeners();
+    try {
+      setupEventListeners();
+      console.log('事件监听器设置完成');
+    } catch (err) {
+      console.error('设置事件监听器失败:', err);
+    }
     
     // 记录系统信息
     console.info('系统信息:', {
