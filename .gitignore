@@ -1,0 +1,64 @@
+# 忽略GBA4Browser目录
+/GBA4Browser/
+
+# 忽略Node.js相关文件
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# 忽略编译生成的文件
+/dist/
+/build/
+
+# 忽略环境配置文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 忽略编辑器配置文件
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# 忽略操作系统生成的文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 忽略日志文件
+*.log
+logs/
+
+# 忽略临时文件
+*.tmp
+*.temp
+*.swp
+*~
+
+# 忽略Python相关文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 忽略游戏ROM和存档文件
+*.gba
+*.sav
+/data/games/
+/data/states/ 
