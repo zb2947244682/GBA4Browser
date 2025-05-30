@@ -8,38 +8,239 @@
   <script>
     // 全局错误处理
     window.onerror = function(message, source, lineno, colno, error) {
+      console.error('全局错误: ' + message);
       alert('全局错误: ' + message);
       return true;
     };
     
-    // 确保showLogs函数在模块加载前可用
-    window.showLogs = function() {
-      if (window._logContainer) {
-        window._logContainer.style.display = 'flex';
-        // 确保日志内容更新
-        if (typeof window.updateLogDisplay === 'function') {
-          window.updateLogDisplay();
-        }
-      } else {
-        // 尝试初始化日志系统
-        if (typeof window.initLogger === 'function') {
-          try {
-            window.initLogger();
-            setTimeout(function() {
-              if (window._logContainer) {
-                window._logContainer.style.display = 'flex';
-              } else {
-                alert('日志系统初始化失败');
-              }
-            }, 100);
-          } catch (err) {
-            alert('日志系统初始化失败: ' + err.message);
-          }
+    // 内联日志系统（确保在微信环境中可用）
+    (function() {
+      // 创建日志容器
+      function createLogContainer() {
+        if (window._logContainer) return window._logContainer;
+        
+        var logContainer = document.createElement('div');
+        logContainer.className = 'log-container';
+        logContainer.style.position = 'fixed';
+        logContainer.style.top = '0';
+        logContainer.style.left = '0';
+        logContainer.style.width = '100%';
+        logContainer.style.height = '100%';
+        logContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+        logContainer.style.zIndex = '100';
+        logContainer.style.display = 'none';
+        logContainer.style.flexDirection = 'column';
+        logContainer.style.padding = '10px';
+        logContainer.style.overflow = 'hidden';
+        
+        logContainer.innerHTML = `
+          <div class="log-header" style="display:flex;justify-content:space-between;align-items:center;color:white;padding:10px 0;border-bottom:1px solid #444;margin-bottom:10px;">
+            <div class="log-title" style="font-size:18px;font-weight:bold;">日志</div>
+            <button class="log-close" style="background:none;border:none;color:white;font-size:20px;cursor:pointer;">&times;</button>
+          </div>
+          <div class="log-content" style="flex:1;overflow-y:auto;color:#ddd;font-family:monospace;font-size:14px;white-space:pre-wrap;word-wrap:break-word;padding:10px 0;"></div>
+          <div class="log-actions" style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #444;">
+            <button class="log-button" id="log-clear" style="background-color:#444;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;">清除日志</button>
+            <button class="log-button" id="log-copy" style="background-color:#444;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;">复制日志</button>
+          </div>
+        `;
+        
+        // 确保body已经加载完成
+        if (document.body) {
+          document.body.appendChild(logContainer);
         } else {
-          alert('日志系统尚未加载');
+          document.addEventListener('DOMContentLoaded', function() {
+            document.body.appendChild(logContainer);
+          });
+        }
+        
+        window._logContainer = logContainer;
+        window._logs = [];
+        
+        // 添加事件处理
+        document.addEventListener('DOMContentLoaded', function() {
+          logContainer.querySelector('.log-close').addEventListener('click', function() {
+            logContainer.style.display = 'none';
+          });
+          
+          logContainer.querySelector('#log-clear').addEventListener('click', function() {
+            window._logs = [];
+            updateLogDisplay();
+          });
+          
+          logContainer.querySelector('#log-copy').addEventListener('click', function() {
+            var logText = window._logs.map(function(log) {
+              return '[' + log.timestamp + '][' + log.type + '] ' + log.message;
+            }).join('\n');
+            
+            var textarea = document.createElement('textarea');
+            textarea.value = logText;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            alert('日志已复制到剪贴板');
+          });
+        });
+        
+        return logContainer;
+      }
+      
+      // 添加日志条目
+      function addLogEntry(message, type) {
+        var timestamp = new Date().toLocaleTimeString();
+        var logEntry = {
+          timestamp: timestamp,
+          message: message,
+          type: type || 'log'
+        };
+        
+        if (!window._logs) window._logs = [];
+        window._logs.push(logEntry);
+        
+        // 限制日志数量
+        if (window._logs.length > 1000) {
+          window._logs.shift();
+        }
+        
+        // 更新日志显示
+        if (window._logContainer && window._logContainer.style.display === 'flex') {
+          updateLogDisplay();
         }
       }
-    };
+      
+      // 更新日志显示
+      function updateLogDisplay() {
+        if (!window._logContainer) return;
+        
+        var logContent = window._logContainer.querySelector('.log-content');
+        if (!logContent) return;
+        
+        logContent.innerHTML = '';
+        
+        window._logs.forEach(function(log) {
+          var logElement = document.createElement('div');
+          logElement.className = 'log-entry ' + log.type;
+          logElement.textContent = '[' + log.timestamp + '] ' + log.message;
+          
+          // 设置日志条目样式
+          logElement.style.marginBottom = '5px';
+          logElement.style.paddingBottom = '5px';
+          logElement.style.borderBottom = '1px solid #333';
+          
+          // 根据类型设置颜色
+          if (log.type === 'error') {
+            logElement.style.color = '#ff6b6b';
+          } else if (log.type === 'warn') {
+            logElement.style.color = '#feca57';
+          } else if (log.type === 'info') {
+            logElement.style.color = '#54a0ff';
+          }
+          
+          logContent.appendChild(logElement);
+        });
+        
+        // 滚动到底部
+        logContent.scrollTop = logContent.scrollHeight;
+      }
+      
+      // 重写控制台方法
+      var originalConsole = {
+        log: console.log,
+        error: console.error,
+        warn: console.warn,
+        info: console.info
+      };
+      
+      console.log = function() {
+        var args = Array.from(arguments);
+        var message = args.map(function(arg) {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        addLogEntry(message, 'log');
+        originalConsole.log.apply(console, arguments);
+      };
+      
+      console.error = function() {
+        var args = Array.from(arguments);
+        var message = args.map(function(arg) {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        addLogEntry(message, 'error');
+        originalConsole.error.apply(console, arguments);
+      };
+      
+      console.warn = function() {
+        var args = Array.from(arguments);
+        var message = args.map(function(arg) {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        addLogEntry(message, 'warn');
+        originalConsole.warn.apply(console, arguments);
+      };
+      
+      console.info = function() {
+        var args = Array.from(arguments);
+        var message = args.map(function(arg) {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        addLogEntry(message, 'info');
+        originalConsole.info.apply(console, arguments);
+      };
+      
+      // 暴露全局函数
+      window.showLogs = function() {
+        var logContainer = createLogContainer();
+        logContainer.style.display = 'flex';
+        updateLogDisplay();
+      };
+      
+      window.updateLogDisplay = updateLogDisplay;
+      window.initLogger = function() {
+        createLogContainer();
+        console.log('内联日志系统初始化完成');
+      };
+      
+      // 自动初始化
+      document.addEventListener('DOMContentLoaded', function() {
+        createLogContainer();
+        console.log('内联日志系统已自动初始化');
+      });
+    })();
   </script>
 </head>
 <body>

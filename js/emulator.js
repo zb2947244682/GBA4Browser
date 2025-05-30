@@ -78,8 +78,28 @@ async function loadMGBA() {
   try {
     console.log('开始加载mGBA模块...');
     
+    // 检查是否在微信环境中
+    const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+    
+    // 在微信环境中预加载WASM文件
+    if (isWeChat) {
+      console.log('微信环境：预加载WASM文件');
+      try {
+        // 预加载WASM文件
+        const wasmFetch = fetch('mgba.wasm');
+        console.log('WASM文件请求已发送');
+        
+        // 设置全局变量，以便mgba.js可以使用
+        window.wasmBinary = await (await wasmFetch).arrayBuffer();
+        console.log('WASM文件预加载完成，大小:', window.wasmBinary.byteLength, '字节');
+      } catch (wasmErr) {
+        console.error('预加载WASM文件失败:', wasmErr);
+      }
+    }
+    
     // 尝试使用动态导入
     try {
+      console.log('尝试使用ES模块导入mGBA');
       mGBA = await import('../mgba.js');
       console.log('mGBA模块通过ES模块导入成功');
       return mGBA;
@@ -142,14 +162,36 @@ async function initEmulator() {
     
     // 初始化模拟器
     try {
-      module = await mGBA.default({
-        canvas: document.getElementById('gba-canvas'),
-        print: console.log,
-        printErr: console.error
-      });
+      // 添加错误处理
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error('全局错误:', message, source, lineno, colno);
+        if (compatibility.isWeChat) {
+          // 在微信环境中显示错误信息
+          document.querySelector('.upload-text').textContent = `错误: ${message}`;
+          document.querySelector('.upload-text').style.display = 'block';
+        }
+        return true;
+      };
+      
+      // 设置WASM加载路径
+      if (typeof mGBA.default === 'function') {
+        module = await mGBA.default({
+          canvas: document.getElementById('gba-canvas'),
+          print: function(text) { console.log('[mGBA]', text); },
+          printErr: function(text) { console.error('[mGBA]', text); },
+          locateFile: function(path) {
+            console.log('正在加载文件:', path);
+            return path;
+          }
+        });
+      } else {
+        console.error('mGBA模块格式不正确');
+        document.querySelector('.upload-text').textContent = 'mGBA模块格式不正确，请刷新页面重试';
+        return null;
+      }
     } catch (err) {
       console.error('初始化模拟器实例失败:', err.message);
-      document.querySelector('.upload-text').textContent = '模拟器初始化失败，请刷新页面重试';
+      document.querySelector('.upload-text').textContent = '模拟器初始化失败: ' + err.message;
       throw err;
     }
 
@@ -157,8 +199,12 @@ async function initEmulator() {
     
     // 初始化文件系统
     try {
-      await module.FSInit();
-      console.log('文件系统初始化完成');
+      if (typeof module.FSInit === 'function') {
+        await module.FSInit();
+        console.log('文件系统初始化完成');
+      } else {
+        console.warn('模块没有FSInit方法，尝试继续');
+      }
     } catch (err) {
       console.error('文件系统初始化失败:', err.message);
       document.querySelector('.upload-text').textContent = '文件系统初始化失败，请刷新页面重试';
@@ -178,7 +224,7 @@ async function initEmulator() {
     return module;
   } catch (err) {
     console.error('模拟器初始化失败:', err);
-    document.querySelector('.upload-text').textContent = '模拟器加载失败，请刷新页面重试';
+    document.querySelector('.upload-text').textContent = '模拟器加载失败: ' + (err.message || '未知错误');
     throw err;
   }
 }
