@@ -451,39 +451,49 @@
 
     // 初始化模拟器
     async function initEmulator() {
-      module = await mGBA({
-        canvas: document.getElementById('gba-canvas'),
-        print: console.log,
-        printErr: console.error
-      });
+      try {
+        console.log('正在初始化模拟器...');
+        module = await mGBA({
+          canvas: document.getElementById('gba-canvas'),
+          print: console.log,
+          printErr: console.error
+        });
 
-      // 初始化文件系统
-      await module.FSInit();
+        console.log('模拟器基础初始化完成，正在设置文件系统...');
+        // 初始化文件系统
+        await module.FSInit();
+        console.log('文件系统初始化完成');
 
-      // 设置按键映射
-      module.bindKey('KeyZ', 'a');
-      module.bindKey('KeyX', 'b');
-      module.bindKey('Enter', 'start');
-      module.bindKey('ShiftRight', 'select');
-      module.bindKey('ArrowUp', 'up');
-      module.bindKey('ArrowDown', 'down');
-      module.bindKey('ArrowLeft', 'left');
-      module.bindKey('ArrowRight', 'right');
-      module.bindKey('KeyQ', 'l');
-      module.bindKey('KeyW', 'r');
+        // 设置按键映射
+        module.bindKey('KeyZ', 'a');
+        module.bindKey('KeyX', 'b');
+        module.bindKey('Enter', 'start');
+        module.bindKey('ShiftRight', 'select');
+        module.bindKey('ArrowUp', 'up');
+        module.bindKey('ArrowDown', 'down');
+        module.bindKey('ArrowLeft', 'left');
+        module.bindKey('ArrowRight', 'right');
+        module.bindKey('KeyQ', 'l');
+        module.bindKey('KeyW', 'r');
 
-      // 键盘事件监听
-      document.addEventListener('keydown', (e) => {
-        if (!module) return;
-        module.buttonPress(e.code.replace('Key', '').toLowerCase());
-      });
-      document.addEventListener('keyup', (e) => {
-        if (!module) return;
-        module.buttonUnpress(e.code.replace('Key', '').toLowerCase());
-      });
-      
-      // 隐藏上传文字
-      document.querySelector('.upload-text').style.display = 'none';
+        // 键盘事件监听
+        document.addEventListener('keydown', (e) => {
+          if (!module) return;
+          module.buttonPress(e.code.replace('Key', '').toLowerCase());
+        });
+        document.addEventListener('keyup', (e) => {
+          if (!module) return;
+          module.buttonUnpress(e.code.replace('Key', '').toLowerCase());
+        });
+        
+        // 隐藏上传文字
+        document.querySelector('.upload-text').style.display = 'none';
+        console.log('模拟器初始化完成');
+      } catch (err) {
+        console.error('模拟器初始化失败:', err);
+        document.querySelector('.upload-text').textContent = '模拟器加载失败，请刷新页面重试';
+        throw err;
+      }
     }
 
     // 上传 ROM
@@ -494,19 +504,50 @@
       // 隐藏上传文字
       document.querySelector('.upload-text').style.display = 'none';
 
-      await module.uploadRom(file, () => {
-        const romPath = `/data/games/${file.name}`;
-        if (module.loadGame(romPath)) {
-          module.resumeGame();
-          console.log('ROM 加载成功:', romPath);
-        } else {
-          console.error('ROM 加载失败');
+      // 确保模拟器已初始化
+      if (!module) {
+        try {
+          console.log('模拟器未初始化，正在初始化...');
+          await initEmulator();
+        } catch (err) {
+          console.error('模拟器初始化失败:', err);
+          return;
         }
-      });
+      }
+
+      // 确保模块存在并且有uploadRom方法
+      if (!module || typeof module.uploadRom !== 'function') {
+        console.error('模拟器模块未正确加载，请刷新页面重试');
+        return;
+      }
+
+      try {
+        await module.uploadRom(file, () => {
+          const romPath = `/data/games/${file.name}`;
+          if (module.loadGame(romPath)) {
+            module.resumeGame();
+            console.log('ROM 加载成功:', romPath);
+          } else {
+            console.error('ROM 加载失败');
+          }
+        });
+      } catch (err) {
+        console.error('ROM 上传失败:', err);
+      }
     });
 
     // 初始化
-    initEmulator();
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM加载完成，准备初始化模拟器...');
+      // 延迟一点初始化，确保页面完全加载
+      setTimeout(() => {
+        initEmulator().catch(err => {
+          console.error('自动初始化失败:', err);
+          // 显示错误信息给用户
+          document.querySelector('.upload-text').textContent = '点击屏幕上传ROM（如果加载失败，请刷新页面）';
+        });
+      }, 500);
+    });
   </script>
 </body>
 </html>
