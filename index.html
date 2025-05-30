@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/styles.css">
   <script>
     // 版本信息
-    window.APP_VERSION = "v1.2.0"; // 每次更新时修改此版本号
+    window.APP_VERSION = "v1.3.0"; // 每次更新时修改此版本号
     
     // 全局错误处理
     window.onerror = function(message, source, lineno, colno, error) {
@@ -351,6 +351,34 @@
         // 添加时间戳，确保每次刷新都能看到变化
         var timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
         versionTag.setAttribute('data-timestamp', timestamp);
+        
+        // 在微信环境中添加额外的调试信息
+        if (/MicroMessenger/i.test(navigator.userAgent)) {
+          // 每秒检查一次模块加载状态
+          var checkModuleInterval = setInterval(function() {
+            var moduleStatus = {
+              moduleExists: !!window.Module,
+              hasFS: !!(window.Module && window.Module.FS),
+              hasCanvas: !!(document.getElementById('gba-canvas')),
+              wasmBinaryExists: !!(window.wasmBinary),
+              timestamp: new Date().toISOString().slice(11, 19)
+            };
+            
+            // 更新版本标签显示状态
+            versionTag.textContent = window.APP_VERSION + ' [' + 
+              (moduleStatus.moduleExists ? '✓' : '✗') + 
+              (moduleStatus.hasFS ? '✓' : '✗') + 
+              (moduleStatus.hasCanvas ? '✓' : '✗') + 
+              (moduleStatus.wasmBinaryExists ? '✓' : '✗') + 
+              '] ' + moduleStatus.timestamp;
+            
+            // 如果模块加载完成，停止检查
+            if (moduleStatus.moduleExists && moduleStatus.hasFS) {
+              clearInterval(checkModuleInterval);
+              console.log('模块加载检查完成，状态:', moduleStatus);
+            }
+          }, 1000);
+        }
       }
     }
   </script>

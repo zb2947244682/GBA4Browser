@@ -88,7 +88,11 @@ async function loadMGBA() {
       // 预加载WASM文件
       try {
         console.log('尝试预加载WASM文件');
-        const wasmResponse = await fetch('mgba.wasm');
+        const wasmResponse = await fetch('mgba.wasm', { 
+          cache: 'no-store',  // 禁用缓存
+          headers: { 'Pragma': 'no-cache' }
+        });
+        
         if (wasmResponse.ok) {
           const wasmBuffer = await wasmResponse.arrayBuffer();
           window.wasmBinary = wasmBuffer;
@@ -117,10 +121,74 @@ async function loadMGBA() {
             console.error('[mGBA]', text); 
           },
           canvas: document.getElementById('gba-canvas'),
+          wasmBinary: window.wasmBinary, // 使用预加载的WASM二进制数据
           onRuntimeInitialized: function() {
             console.log('mGBA运行时初始化完成');
             if (window.Module) {
+              // 添加必要的方法
+              if (!window.Module.uploadRom && window.Module.FS) {
+                window.Module.uploadRom = function(file, callback) {
+                  return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                      try {
+                        const arrayBuffer = e.target.result;
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        
+                        // 确保目录存在
+                        if (!window.Module.FS.analyzePath('/data', true).exists) {
+                          window.Module.FS.mkdir('/data');
+                        }
+                        if (!window.Module.FS.analyzePath('/data/games', true).exists) {
+                          window.Module.FS.mkdir('/data/games');
+                        }
+                        
+                        // 写入文件
+                        const romPath = `/data/games/${file.name}`;
+                        window.Module.FS.writeFile(romPath, uint8Array);
+                        console.log('ROM文件写入成功:', romPath);
+                        
+                        if (callback) callback();
+                        resolve();
+                      } catch (err) {
+                        console.error('处理ROM文件失败:', err);
+                        reject(err);
+                      }
+                    };
+                    reader.onerror = function(err) {
+                      console.error('读取ROM文件失败:', err);
+                      reject(err);
+                    };
+                    reader.readAsArrayBuffer(file);
+                  });
+                };
+              }
+              
+              // 初始化文件系统
+              if (!window.Module.FSInit && window.Module.FS) {
+                window.Module.FSInit = function() {
+                  return new Promise((resolve) => {
+                    try {
+                      // 确保目录存在
+                      if (!window.Module.FS.analyzePath('/data', true).exists) {
+                        window.Module.FS.mkdir('/data');
+                      }
+                      if (!window.Module.FS.analyzePath('/data/games', true).exists) {
+                        window.Module.FS.mkdir('/data/games');
+                      }
+                      console.log('文件系统初始化完成');
+                      resolve();
+                    } catch (err) {
+                      console.error('文件系统初始化失败:', err);
+                      resolve(); // 即使失败也继续
+                    }
+                  });
+                };
+              }
+              
               resolve({ default: function() { return window.Module; } });
+            } else {
+              reject(new Error('mGBA模块初始化失败'));
             }
           },
           onAbort: function(reason) {
@@ -130,7 +198,7 @@ async function loadMGBA() {
         };
         
         const script = document.createElement('script');
-        script.src = 'mgba.js';
+        script.src = 'mgba.js?' + new Date().getTime(); // 添加时间戳避免缓存
         script.async = true;
         script.onerror = function(err) {
           console.error('加载mGBA脚本失败:', err);
@@ -144,7 +212,7 @@ async function loadMGBA() {
             console.error('mGBA模块加载超时');
             reject(new Error('mGBA模块加载超时'));
           }
-        }, 10000);
+        }, 15000); // 延长超时时间
       });
     }
     
@@ -213,8 +281,33 @@ async function initEmulator() {
       return true;
     };
     
+    // 打印调试信息
+    try {
+      const debugInfo = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        vendor: navigator.vendor,
+        language: navigator.language,
+        screenSize: `${window.screen.width}x${window.screen.height}`,
+        devicePixelRatio: window.devicePixelRatio,
+        isWeChat: compatibility.isWeChat,
+        moduleLoaded: !!window.Module,
+        canvasReady: !!document.getElementById('gba-canvas'),
+        loggerReady: typeof console.log === 'function',
+        wasmBinaryLoaded: !!window.wasmBinary,
+        moduleProperties: window.Module ? Object.keys(window.Module) : []
+      };
+      console.log('调试信息:', JSON.stringify(debugInfo));
+    } catch (debugErr) {
+      console.warn('获取调试信息失败:', debugErr);
+    }
+    
     // 加载mGBA模块
     try {
+      if (compatibility.isWeChat) {
+        console.warn('微信环境：ES模块加载可能失败，尝试使用传统脚本加载');
+      }
+      
       mGBA = await loadMGBA();
       console.log('mGBA模块加载成功');
     } catch (err) {
@@ -407,13 +500,23 @@ async function handleRomUpload(file) {
             
             // 加载游戏
             if (typeof module.loadGame === 'function') {
-              if (module.loadGame(romPath)) {
-                console.log('ROM加载成功');
+              console.log('尝试加载游戏:', romPath);
+              const loadResult = module.loadGame(romPath);
+              console.log('loadGame结果:', loadResult);
+              
+              if (loadResult) {
+                console.log('ROM加载成功，尝试启动游戏');
                 
                 // 启动游戏
                 if (typeof module.resumeGame === 'function') {
                   module.resumeGame();
                   console.log('游戏已启动');
+                  
+                  // 更新版本标签
+                  const versionTag = document.getElementById('version-tag');
+                  if (versionTag) {
+                    versionTag.textContent = window.APP_VERSION + ' [游戏已加载]';
+                  }
                 } else {
                   console.warn('模块没有resumeGame方法');
                 }
