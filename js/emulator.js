@@ -194,6 +194,18 @@ async function handleRomUpload(file) {
     return;
   }
 
+  // 检查文件类型
+  const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+  const fileExt = file.name.split('.').pop().toLowerCase();
+  const supportedExts = ['gba', 'gbc', 'gb', 'zip', '7z'];
+  
+  if (!supportedExts.includes(fileExt)) {
+    console.warn(`文件类型 .${fileExt} 可能不受支持，尝试加载...`);
+    if (isWeChat) {
+      alert(`注意：微信环境中选择的文件格式为 .${fileExt}，可能无法正常运行。建议使用 .gba 格式的ROM文件。`);
+    }
+  }
+
   // 隐藏上传文字
   document.querySelector('.upload-text').style.display = 'none';
 
@@ -230,10 +242,12 @@ async function handleRomUpload(file) {
         console.log('ROM 加载成功:', romPath);
       } else {
         console.error('ROM 加载失败');
+        alert('ROM 加载失败，可能是不支持的格式或文件损坏');
       }
     });
   } catch (err) {
     console.error('ROM 上传失败:', err);
+    alert('ROM 上传失败: ' + (err.message || '未知错误'));
   }
 }
 
@@ -246,11 +260,38 @@ function setupEventListeners() {
   
   // 上传 ROM
   const romUpload = document.getElementById('rom-upload');
+  const wechatRomUpload = document.getElementById('wechat-rom-upload');
   const emulatorContainer = document.getElementById('emulator-container');
   
-  if (romUpload) {
+  // 选择合适的上传控件
+  const activeUploader = compatibility.isWeChat && wechatRomUpload ? wechatRomUpload : romUpload;
+  
+  if (activeUploader) {
+    // 微信环境特殊处理
+    if (compatibility.isWeChat) {
+      console.log('微信环境：使用专用文件上传控件');
+      
+      // 显示微信专用上传控件
+      if (wechatRomUpload) {
+        wechatRomUpload.style.display = 'block';
+        wechatRomUpload.style.opacity = '0.01';
+        wechatRomUpload.style.position = 'absolute';
+        wechatRomUpload.style.top = '0';
+        wechatRomUpload.style.left = '0';
+        wechatRomUpload.style.width = '100%';
+        wechatRomUpload.style.height = '100%';
+        wechatRomUpload.style.zIndex = '20';
+      }
+      
+      // 添加提示
+      const uploadText = document.querySelector('.upload-text');
+      if (uploadText) {
+        uploadText.textContent = '点击屏幕上传ROM (在微信中，请选择"文件"而非"照片")';
+      }
+    }
+    
     // 正常的文件上传事件
-    romUpload.addEventListener('change', (event) => {
+    activeUploader.addEventListener('change', (event) => {
       if (event.target.files && event.target.files.length > 0) {
         handleRomUpload(event.target.files[0]);
       } else {
@@ -262,15 +303,12 @@ function setupEventListeners() {
     if (compatibility.isWeChat || compatibility.isWebView) {
       console.log('检测到微信或WebView环境，添加特殊处理');
       
-      // 确保文件选择器可点击
-      romUpload.style.opacity = '0.01'; // 不要完全透明，以便微信能检测到点击
-      
       // 添加点击事件到容器
       emulatorContainer.addEventListener('click', () => {
         console.log('模拟器容器被点击，尝试触发文件选择');
         try {
           // 尝试手动触发点击
-          romUpload.click();
+          activeUploader.click();
         } catch (err) {
           console.error('无法触发文件选择:', err);
           alert('在当前浏览器环境中无法选择文件，请尝试使用系统浏览器打开');
