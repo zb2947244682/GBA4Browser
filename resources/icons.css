@@ -1,0 +1,113 @@
+/* 图标样式 */
+.icon {
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    position: relative;
+    background-color: transparent;
+}
+
+/* 存档图标 */
+.icon-save {
+    border: 2px solid #fff;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+.icon-save::before {
+    content: "";
+    position: absolute;
+    top: 25%;
+    left: 25%;
+    width: 50%;
+    height: 50%;
+    background-color: #fff;
+    border-radius: 50%;
+}
+
+/* 读档图标 */
+.icon-load {
+    border: 2px solid #fff;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+.icon-load::before {
+    content: "";
+    position: absolute;
+    top: 25%;
+    left: 25%;
+    width: 50%;
+    height: 50%;
+    border-top: 2px solid #fff;
+    border-right: 2px solid #fff;
+    transform: rotate(45deg);
+}
+
+/* 重置图标 */
+.icon-reset {
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.icon-reset::before {
+    content: "";
+    position: absolute;
+    top: 15%;
+    left: 50%;
+    width: 2px;
+    height: 40%;
+    background-color: #fff;
+}
+.icon-reset::after {
+    content: "";
+    position: absolute;
+    top: 15%;
+    left: 50%;
+    width: 40%;
+    height: 2px;
+    background-color: #fff;
+    transform: rotate(-45deg);
+    transform-origin: left center;
+}
+
+/* 日志图标 */
+.icon-log {
+    border: 2px solid #fff;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+.icon-log::before {
+    content: "";
+    position: absolute;
+    top: 25%;
+    left: 20%;
+    width: 60%;
+    height: 2px;
+    background-color: #fff;
+}
+.icon-log::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 20%;
+    width: 60%;
+    height: 2px;
+    background-color: #fff;
+}
+
+/* 测试图标 */
+.icon-test {
+    border: 2px solid #fff;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+.icon-test::before {
+    content: "";
+    position: absolute;
+    top: 20%;
+    left: 20%;
+    width: 60%;
+    height: 60%;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-sizing: border-box;
+} 
