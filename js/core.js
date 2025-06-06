@@ -44,6 +44,73 @@ class ARMCore {
 		this.generateConds();
 
 		this.gprs = new Int32Array(16);
+
+		this.dataProcessingOperations = {
+			0x00000000: { // AND
+				'0': this.armCompiler.constructAND,
+				'1': this.armCompiler.constructANDS
+			},
+			0x00200000: { // EOR
+				'0': this.armCompiler.constructEOR,
+				'1': this.armCompiler.constructEORS
+			},
+			0x00400000: { // SUB
+				'0': this.armCompiler.constructSUB,
+				'1': this.armCompiler.constructSUBS
+			},
+			0x00600000: { // RSB
+				'0': this.armCompiler.constructRSB,
+				'1': this.armCompiler.constructRSBS
+			},
+			0x00800000: { // ADD
+				'0': this.armCompiler.constructADD,
+				'1': this.armCompiler.constructADDS
+			},
+			0x00a00000: { // ADC
+				'0': this.armCompiler.constructADC,
+				'1': this.armCompiler.constructADCS
+			},
+			0x00c00000: { // SBC
+				'0': this.armCompiler.constructSBC,
+				'1': this.armCompiler.constructSBCS
+			},
+			0x00e00000: { // RSC
+				'0': this.armCompiler.constructRSC,
+				'1': this.armCompiler.constructRSCS
+			},
+			0x01000000: { // TST
+				'0': this.armCompiler.constructTST,
+				'1': this.armCompiler.constructTST
+			},
+			0x01200000: { // TEQ
+				'0': this.armCompiler.constructTEQ,
+				'1': this.armCompiler.constructTEQ
+			},
+			0x01400000: { // CMP
+				'0': this.armCompiler.constructCMP,
+				'1': this.armCompiler.constructCMP
+			},
+			0x01600000: { // CMN
+				'0': this.armCompiler.constructCMN,
+				'1': this.armCompiler.constructCMN
+			},
+			0x01800000: { // ORR
+				'0': this.armCompiler.constructORR,
+				'1': this.armCompiler.constructORRS
+			},
+			0x01a00000: { // MOV
+				'0': this.armCompiler.constructMOV,
+				'1': this.armCompiler.constructMOVS
+			},
+			0x01c00000: { // BIC
+				'0': this.armCompiler.constructBIC,
+				'1': this.armCompiler.constructBICS
+			},
+			0x01e00000: { // MVN
+				'0': this.armCompiler.constructMVN,
+				'1': this.armCompiler.constructMVNS
+			}
+		};
 	}
 	resetCPU(startOffset) {
 		for (var i = 0; i < this.PC; ++i) {
@@ -709,259 +776,12 @@ class ARMCore {
 					);
 				}
 
-				switch (opcode) {
-					case 0x00000000:
-						// AND
-						if (s) {
-							op = this.armCompiler.constructANDS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructAND(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00200000:
-						// EOR
-						if (s) {
-							op = this.armCompiler.constructEORS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructEOR(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00400000:
-						// SUB
-						if (s) {
-							op = this.armCompiler.constructSUBS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructSUB(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00600000:
-						// RSB
-						if (s) {
-							op = this.armCompiler.constructRSBS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructRSB(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00800000:
-						// ADD
-						if (s) {
-							op = this.armCompiler.constructADDS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructADD(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00a00000:
-						// ADC
-						if (s) {
-							op = this.armCompiler.constructADCS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructADC(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00c00000:
-						// SBC
-						if (s) {
-							op = this.armCompiler.constructSBCS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructSBC(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x00e00000:
-						// RSC
-						if (s) {
-							op = this.armCompiler.constructRSCS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructRSC(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x01000000:
-						// TST
-						op = this.armCompiler.constructTST(
-							rd,
-							rn,
-							shiftOp,
-							condOp
-						);
-						break;
-					case 0x01200000:
-						// TEQ
-						op = this.armCompiler.constructTEQ(
-							rd,
-							rn,
-							shiftOp,
-							condOp
-						);
-						break;
-					case 0x01400000:
-						// CMP
-						op = this.armCompiler.constructCMP(
-							rd,
-							rn,
-							shiftOp,
-							condOp
-						);
-						break;
-					case 0x01600000:
-						// CMN
-						op = this.armCompiler.constructCMN(
-							rd,
-							rn,
-							shiftOp,
-							condOp
-						);
-						break;
-					case 0x01800000:
-						// ORR
-						if (s) {
-							op = this.armCompiler.constructORRS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructORR(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x01a00000:
-						// MOV
-						if (s) {
-							op = this.armCompiler.constructMOVS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructMOV(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x01c00000:
-						// BIC
-						if (s) {
-							op = this.armCompiler.constructBICS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructBIC(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
-					case 0x01e00000:
-						// MVN
-						if (s) {
-							op = this.armCompiler.constructMVNS(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						} else {
-							op = this.armCompiler.constructMVN(
-								rd,
-								rn,
-								shiftOp,
-								condOp
-							);
-						}
-						break;
+				var constructor = this.dataProcessingOperations[opcode][s ? '1' : '0'];
+				if (constructor) {
+					op = constructor(rd, rn, shiftOp, condOp);
+				} else {
+					// Fallback for unsupported opcodes or error handling
+					op = this.badOp(instruction);
 				}
 				op.writesPC = rd == this.PC;
 			}
