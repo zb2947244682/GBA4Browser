@@ -1,35 +1,49 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEmulator } from '../hooks/useEmulator';
 import type { mGBAEmulator } from '@thenick775/mgba-wasm';
+import LoadingSpinner from './LoadingSpinner';
 
 const GBAEmulator: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [romLoaded, setRomLoaded] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const { emulator, isLoading, error } = useEmulator(canvasRef.current);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const { emulator, isLoading, error } = useEmulator(canvas);
+
+  // 当 canvasRef.current 可用时，设置 canvas 状态
+  useEffect(() => {
+    if (canvasRef.current) {
+      setCanvas(canvasRef.current);
+    }
+  }, []);
+
+  // 保存最后加载的 ROM 文件的引用
+  const lastLoadedFile = useRef<File | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !emulator) return;
+    
+    // 保存文件引用以便稍后重置
+    lastLoadedFile.current = file;
 
     try {
-      // Read the ROM file
-      const arrayBuffer = await file.arrayBuffer();
-      const romData = new Uint8Array(arrayBuffer);
+      console.log('Loading ROM file:', file.name);
       
-      // Write the ROM data to the emulator's file system
-      emulator.FS.writeFile(file.name, romData);
-      
-      // Load the ROM
-      emulator.loadRom(file.name);
-      
-      // Start emulation
-      emulator.start();
-      setRomLoaded(true);
-      setIsPaused(false);
+      // 使用 uploadRom 方法加载 ROM
+      emulator.uploadRom(file, () => {
+        console.log('ROM uploaded successfully');
+        
+        // 启动游戏
+        emulator.resumeGame();
+        emulator.resumeAudio();
+        
+        setRomLoaded(true);
+        setIsPaused(false);
+      });
     } catch (error) {
       console.error('Error loading ROM:', error);
-      alert('Failed to load ROM file');
+      alert('Failed to load ROM file: ' + String(error));
     }
   };
 
@@ -37,9 +51,13 @@ const GBAEmulator: React.FC = () => {
     if (!emulator || !romLoaded) return;
     
     if (isPaused) {
-      emulator.start();
+      console.log('Resuming game...');
+      emulator.resumeGame();
+      emulator.resumeAudio();
     } else {
-      emulator.pause();
+      console.log('Pausing game...');
+      emulator.pauseGame();
+      emulator.pauseAudio();
     }
     
     setIsPaused(!isPaused);
@@ -48,10 +66,19 @@ const GBAEmulator: React.FC = () => {
   const reset = () => {
     if (!emulator || !romLoaded) return;
     
-    emulator.reset();
-    if (isPaused) {
-      emulator.start();
-      setIsPaused(false);
+    console.log('Resetting game...');
+    
+    // mGBA 没有直接提供 reset 方法，所以我们需要先停止游戏，然后重新加载
+    emulator.quitGame();
+    
+    // 重新加载最后一个 ROM 文件
+    if (lastLoadedFile.current) {
+      emulator.uploadRom(lastLoadedFile.current, () => {
+        console.log('ROM reloaded successfully');
+        emulator.resumeGame();
+        emulator.resumeAudio();
+        setIsPaused(false);
+      });
     }
   };
 
@@ -103,6 +130,7 @@ const GBAEmulator: React.FC = () => {
       <p>A web-based Game Boy Advance emulator</p>
       
       {error && <p className="error">{error}</p>}
+      {isLoading ? <LoadingSpinner /> : null}
       
       <canvas 
         ref={canvasRef} 
@@ -126,26 +154,26 @@ const GBAEmulator: React.FC = () => {
             onClick={togglePause} 
             disabled={isLoading || !emulator || !romLoaded}
           >
-            {isPaused ? 'Resume' : 'Pause'}
+            {isPaused ? '继续' : '暂停'}
           </button>
           <button 
             onClick={reset} 
             disabled={isLoading || !emulator || !romLoaded}
           >
-            Reset
+            重置
           </button>
         </div>
       </div>
       
       <div className="instructions">
-        <h3>Controls:</h3>
-        <p>D-Pad: Arrow Keys</p>
-        <p>A Button: Z</p>
-        <p>B Button: X</p>
-        <p>L Button: A</p>
-        <p>R Button: S</p>
-        <p>Start: Enter</p>
-        <p>Select: Backspace</p>
+        <h3>控制方式:</h3>
+        <p>方向键: 上下左右</p>
+        <p>A 键: Z</p>
+        <p>B 键: X</p>
+        <p>L 键: A</p>
+        <p>R 键: S</p>
+        <p>开始: Enter</p>
+        <p>选择: Backspace</p>
       </div>
     </div>
   );
