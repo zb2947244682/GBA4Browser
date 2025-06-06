@@ -21,6 +21,8 @@
       white-space: pre;
     }
   </style>
+  <!-- 直接引入 mgba.js -->
+  <script src="./mgba.js"></script>
 </head>
 <body>
   <h1>mGBA Minimal Debug</h1>
@@ -51,38 +53,27 @@
       logElement.scrollTop = logElement.scrollHeight;
     }
 
-    // 直接从URL加载脚本
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => resolve();
-        script.onerror = (err) => reject(err);
-        document.head.appendChild(script);
-      });
-    }
-    
     // 主初始化函数
     async function init() {
       try {
         log('加载 mGBA...');
         
-        // 直接使用导入的脚本
-        await loadScript('/node_modules/@thenick775/mgba-wasm/dist/mgba.js');
-        
-        if (typeof mGBA !== 'function') {
-          throw new Error('mGBA 未正确加载');
+        // 检查 mGBA 是否已定义
+        if (typeof mGBA === 'undefined') {
+          log('mGBA 未定义 - 脚本可能未正确加载');
+          return;
         }
         
-        log('mGBA 脚本已加载');
+        log('mGBA 脚本已找到');
         
         // 初始化 mGBA
         mgba = await mGBA({
           canvas,
           locateFile: (path, prefix) => {
             if (path.endsWith('.wasm')) {
-              log(`加载 WASM 文件: /mgba.wasm`);
-              return '/mgba.wasm';
+              const wasmPath = './mgba.wasm'; // 使用复制到 public 目录的文件
+              log(`加载 WASM 文件: ${wasmPath}`);
+              return wasmPath;
             }
             return prefix + path;
           },
@@ -143,9 +134,9 @@
           log('开始游戏');
           
           // 尝试不同的启动方法组合
-          try { mgba.resumeMainLoop(); } catch (e) {}
-          try { mgba.resumeGame(); } catch (e) {}
-          try { mgba.resumeAudio(); } catch (e) {}
+          try { mgba.resumeMainLoop(); } catch (e) { log(`resumeMainLoop 错误: ${e.message}`); }
+          try { mgba.resumeGame(); } catch (e) { log(`resumeGame 错误: ${e.message}`); }
+          try { mgba.resumeAudio(); } catch (e) { log(`resumeAudio 错误: ${e.message}`); }
           
           // 尝试绑定一些按键
           try {
@@ -182,7 +173,12 @@
           
           // 尝试手动刷新
           setTimeout(() => {
-            try { mgba.screenshot(); } catch(e) {} 
+            try { 
+              mgba.screenshot(); 
+              log('截图完成');
+            } catch(e) { 
+              log(`截图错误: ${e.message}`);
+            } 
           }, 500);
         } catch (err) {
           log(`启动错误: ${err.message}`);
@@ -195,33 +191,120 @@
           log('刷新画面');
           
           // 尝试截图强制刷新
-          try { mgba.screenshot(); } catch(e) {}
+          try { 
+            mgba.screenshot();
+            log('截图完成');
+          } catch(e) {
+            log(`截图错误: ${e.message}`);
+          }
           
           // 暂停再恢复
-          try { mgba.pauseMainLoop(); } catch(e) {}
-          try { mgba.pauseGame(); } catch(e) {}
+          try { 
+            mgba.pauseMainLoop();
+            log('主循环已暂停');
+          } catch(e) {
+            log(`pauseMainLoop 错误: ${e.message}`);
+          }
+          
+          try { 
+            mgba.pauseGame();
+            log('游戏已暂停');
+          } catch(e) {
+            log(`pauseGame 错误: ${e.message}`);
+          }
           
           setTimeout(() => {
-            try { mgba.resumeMainLoop(); } catch(e) {}
-            try { mgba.resumeGame(); } catch(e) {}
+            try { 
+              mgba.resumeMainLoop();
+              log('主循环已恢复');
+            } catch(e) {
+              log(`resumeMainLoop 错误: ${e.message}`);
+            }
+            
+            try { 
+              mgba.resumeGame();
+              log('游戏已恢复');
+            } catch(e) {
+              log(`resumeGame 错误: ${e.message}`);
+            }
           }, 100);
           
           // 设置音量
           try { 
             if (mgba.setVolume) {
               log('设置音量');
-              mgba.setVolume(100); 
+              mgba.setVolume(100);
+              log('音量已设置为 100%');
             }
-          } catch(e) {}
+          } catch(e) {
+            log(`setVolume 错误: ${e.message}`);
+          }
         } catch (err) {
           log(`刷新错误: ${err.message}`);
           console.error(err);
         }
       });
+      
+      // 键盘控制
+      document.addEventListener('keydown', (e) => {
+        if (!mgba || !mgba.buttonPress) return;
+        
+        const keyMap = {
+          'ArrowUp': 6,
+          'ArrowDown': 7,
+          'ArrowLeft': 5,
+          'ArrowRight': 4,
+          'z': 0,
+          'x': 1,
+          'a': 9,
+          's': 8,
+          'Enter': 3,
+          'Backspace': 2
+        };
+        
+        const key = keyMap[e.key];
+        if (key !== undefined) {
+          try {
+            mgba.buttonPress(key);
+            log(`按下: ${e.key} -> ${key}`);
+            e.preventDefault();
+          } catch(err) {
+            log(`buttonPress 错误: ${err.message}`);
+          }
+        }
+      });
+      
+      document.addEventListener('keyup', (e) => {
+        if (!mgba || !mgba.buttonUnpress) return;
+        
+        const keyMap = {
+          'ArrowUp': 6,
+          'ArrowDown': 7,
+          'ArrowLeft': 5,
+          'ArrowRight': 4,
+          'z': 0,
+          'x': 1,
+          'a': 9,
+          's': 8,
+          'Enter': 3,
+          'Backspace': 2
+        };
+        
+        const key = keyMap[e.key];
+        if (key !== undefined) {
+          try {
+            mgba.buttonUnpress(key);
+            log(`释放: ${e.key} -> ${key}`);
+            e.preventDefault();
+          } catch(err) {
+            log(`buttonUnpress 错误: ${err.message}`);
+          }
+        }
+      });
     }
     
-    // 启动初始化
-    init();
+    // 在页面加载完成后启动初始化
+    window.onload = init;
   </script>
 </body>
 </html> 
