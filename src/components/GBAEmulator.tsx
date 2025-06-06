@@ -1,269 +1,358 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { useEmulator } from '../hooks/useEmulator';
-import LoadingSpinner from './LoadingSpinner';
-import { KEY_BINDINGS } from '../utils/mgbaWrapper';
+import React, { useEffect, useRef, useState } from 'react';
+import mGBA from '@thenick775/mgba-wasm';
+// @ts-ignore
+import { createMgbaConfig, createCoreSettings, setupCanvas } from '../../public/mgba-config.js';
 
-// GBA 原始分辨率
-const GBA_WIDTH = 240;
-const GBA_HEIGHT = 160;
+// Key mappings
+const KEY_BINDINGS: Record<string, number> = {
+  'z': 0,          // A
+  'x': 1,          // B
+  'Backspace': 2,  // SELECT
+  'Enter': 3,      // START
+  'ArrowRight': 4, // RIGHT
+  'ArrowLeft': 5,  // LEFT
+  'ArrowUp': 6,    // UP
+  'ArrowDown': 7,  // DOWN
+  's': 8,          // R
+  'a': 9           // L
+};
+
+// mGBA module configuration interface
+interface MGBAConfig {
+  canvas: HTMLCanvasElement;
+  locateFile?: (path: string, prefix?: string) => string;
+  print?: (text: string) => void;
+  printErr?: (text: string) => void;
+  audioSampleRate?: number;
+  audioBufferSize?: number;
+  frameskip?: number;
+  [key: string]: any;
+}
 
 const GBAEmulator: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [romLoaded, setRomLoaded] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isGameLoaded, setIsGameLoaded] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
-  const [romLoadError, setRomLoadError] = useState<string | null>(null);
-  const { emulator, isLoading, error } = useEmulator(canvas);
-
-  // 保存最后加载的 ROM 文件的引用
-  const lastLoadedFile = useRef<File | null>(null);
-
-  // 当 canvasRef.current 可用时，设置 canvas 状态
+  
+  // Store a reference to the mGBA module
+  const mgbaRef = useRef<any>(null);
+  
+  // Initialize the emulator
   useEffect(() => {
-    if (canvasRef.current) {
-      // 确保 canvas 元素使用原始尺寸
-      canvasRef.current.width = GBA_WIDTH;
-      canvasRef.current.height = GBA_HEIGHT;
-      
-      // 设置 canvas 状态
-      setCanvas(canvasRef.current);
-    }
-  }, []);
+    if (!canvasRef.current || isInitialized) return;
+    
+    const initEmulator = async () => {
+      try {
+        console.log('Initializing mGBA...');
+        setIsLoading(true);
+        setErrorMessage(null);
+        
+        const canvas = canvasRef.current!;
+        
+        // Setup canvas first
+        setupCanvas(canvas);
+        
+        // Create configuration with our helper
+        const config = createMgbaConfig(canvas);
+        
+        // Try loading the module
+        try {
+          // Use dynamic import for mgba.js
+          const mGBAModule = await import('../../public/mgba.js');
+          const module = await mGBAModule.default(config);
+          mgbaRef.current = module;
+        } catch (error) {
+          console.error('Failed to load mGBA module dynamically:', error);
+          
+          // Fallback to regular import
+          const module = await mGBA(config);
+          mgbaRef.current = module;
+        }
+        
+        // Initialize file system
+        if (typeof mgbaRef.current.FSInit === 'function') {
+          await mgbaRef.current.FSInit();
+          console.log('File system initialized');
+        }
+        
+        // Apply core settings
+        if (typeof mgbaRef.current.setCoreSettings === 'function') {
+          const coreSettings = createCoreSettings();
+          mgbaRef.current.setCoreSettings(coreSettings);
+          console.log('Core settings applied');
+        }
 
-  // 检查 canvas 是否正确设置
-  useEffect(() => {
-    if (canvas) {
-      console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
-      console.log('Canvas parent element:', canvas.parentElement);
-      
-      // 确保 canvas 可见
-      canvas.style.border = '2px solid red';
-      
-      // 不要在 canvas 上绘制测试内容，让 mGBA 来控制它
-      console.log('Canvas ready for mGBA rendering');
-    }
-  }, [canvas]);
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        // Try explicitly creating context
+        if (typeof mgbaRef.current.createContext === 'function') {
+          try {
+            mgbaRef.current.createContext(canvas, true);
+            console.log('Context created explicitly');
+          } catch (e) {
+            console.warn('Could not create context explicitly:', e);
+          }
+        }
+        
+        // Set up key bindings
+        setupKeyBindings();
+        
+        setIsInitialized(true);
+        console.log('mGBA initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize mGBA:', error);
+        setErrorMessage(`初始化失败: ${error}`);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    initEmulator();
+  }, [canvasRef.current, isInitialized]);
+  
+  // Setup keyboard controls
+  const setupKeyBindings = () => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = KEY_BINDINGS[e.key];
+      if (key !== undefined && mgbaRef.current && isGameLoaded) {
+        mgbaRef.current.buttonPress(key);
+        e.preventDefault();
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = KEY_BINDINGS[e.key];
+      if (key !== undefined && mgbaRef.current && isGameLoaded) {
+        mgbaRef.current.buttonUnpress(key);
+        e.preventDefault();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  };
+  
+  // Load ROM handler
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !emulator) return;
+    if (!file || !mgbaRef.current) return;
     
-    // 重置错误状态
-    setRomLoadError(null);
+    setIsLoading(true);
+    setErrorMessage(null);
     
-    // 保存文件引用以便稍后重置
-    lastLoadedFile.current = file;
-
     try {
-      console.log('Loading ROM file:', file.name);
-      console.log('ROM file size:', file.size, 'bytes');
+      console.log(`Loading ROM: ${file.name} (${file.size} bytes)`);
       
-      // 检查文件大小是否合理
+      // Check file size
       if (file.size < 1024) {
-        throw new Error('ROM 文件太小，可能不是有效的 GBA ROM');
+        throw new Error('ROM file is too small');
       }
       
       if (file.size > 32 * 1024 * 1024) {
-        throw new Error('ROM 文件太大，超过 32MB');
+        throw new Error('ROM file is too large (max 32MB)');
       }
       
-      // 清除 canvas 上的测试内容
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
+      // If a game is already running, stop it
+      if (isGameLoaded) {
+        pauseGame();
+        mgbaRef.current.quitGame();
       }
       
-      // 使用包装器加载 ROM
-      emulator.loadRom(file, () => {
-        console.log('ROM uploaded successfully');
+      // Load the ROM
+      mgbaRef.current.uploadRom(file, () => {
+        console.log('ROM loaded successfully');
         
-        // 启动游戏
-        try {
-          console.log('Starting game...');
-          
-          // 确保 canvas 尺寸正确设置
-          emulator.setCanvasSize(GBA_WIDTH, GBA_HEIGHT);
-          
-          emulator.start();
-          setRomLoaded(true);
+        // Start the game after a short delay
+        setTimeout(() => {
+          startGame();
+          setIsGameLoaded(true);
           setIsPaused(false);
           
-          // 检查游戏是否真的在运行
+          // Force refresh after a delay to make sure display initializes
           setTimeout(() => {
-            console.log('Game should be running now');
-            
-            // 强制刷新一次画面
-            forceRefresh();
-          }, 1000);
-        } catch (err) {
-          console.error('Error starting game:', err);
-          setRomLoadError('启动游戏失败: ' + String(err));
-        }
+            refreshScreen();
+          }, 500);
+        }, 100);
       });
     } catch (error) {
-      console.error('Error loading ROM:', error);
-      setRomLoadError('加载 ROM 失败: ' + String(error));
+      console.error('Failed to load ROM:', error);
+      setErrorMessage(`ROM加载失败: ${error}`);
+      setIsLoading(false);
     }
   };
-
+  
+  // Start game
+  const startGame = () => {
+    if (!mgbaRef.current) return;
+    
+    try {
+      console.log('Starting game');
+      mgbaRef.current.resumeMainLoop();
+      mgbaRef.current.resumeGame();
+      mgbaRef.current.resumeAudio();
+      setIsPaused(false);
+    } catch (error) {
+      console.error('Failed to start game:', error);
+      setErrorMessage(`启动游戏失败: ${error}`);
+    }
+  };
+  
+  // Pause game
+  const pauseGame = () => {
+    if (!mgbaRef.current) return;
+    
+    try {
+      console.log('Pausing game');
+      mgbaRef.current.pauseMainLoop();
+      mgbaRef.current.pauseGame();
+      mgbaRef.current.pauseAudio();
+      setIsPaused(true);
+    } catch (error) {
+      console.error('Failed to pause game:', error);
+    }
+  };
+  
+  // Toggle pause
   const togglePause = () => {
-    if (!emulator || !romLoaded) return;
-    
-    try {
-      if (isPaused) {
-        console.log('Resuming game...');
-        emulator.start();
-      } else {
-        console.log('Pausing game...');
-        emulator.pause();
-      }
-      
-      setIsPaused(!isPaused);
-    } catch (err) {
-      console.error('Error toggling pause state:', err);
+    if (isPaused) {
+      startGame();
+    } else {
+      pauseGame();
     }
   };
-
-  const reset = () => {
-    if (!emulator || !romLoaded) return;
+  
+  // Reset game
+  const resetGame = () => {
+    if (!mgbaRef.current || !isGameLoaded) return;
     
     try {
-      console.log('Resetting game...');
+      console.log('Resetting game');
+      mgbaRef.current.quickReload();
       
-      // 使用 reset 方法重置游戏
-      emulator.reset();
-      
-      // 如果游戏处于暂停状态，恢复它
+      // Make sure game is running after reset
       if (isPaused) {
-        emulator.start();
-        setIsPaused(false);
+        startGame();
       }
       
-      // 强制刷新画面
-      setTimeout(forceRefresh, 500);
-    } catch (err) {
-      console.error('Error resetting game:', err);
-      
-      // 如果 reset 不起作用，尝试重新加载 ROM
-      if (lastLoadedFile.current) {
-        emulator.quit();
-        emulator.loadRom(lastLoadedFile.current, () => {
-          console.log('ROM reloaded successfully');
-          emulator.start();
-          setIsPaused(false);
-          
-          // 强制刷新画面
-          setTimeout(forceRefresh, 500);
-        });
-      }
+      // Force refresh
+      setTimeout(refreshScreen, 200);
+    } catch (error) {
+      console.error('Failed to reset game:', error);
     }
   };
-
-  // 添加一个强制刷新画面的函数
-  const forceRefresh = () => {
-    if (!canvas || !emulator) return;
+  
+  // Refresh screen
+  const refreshScreen = () => {
+    if (!mgbaRef.current || !isGameLoaded) return;
     
     try {
-      console.log('Forcing screen refresh...');
+      console.log('Refreshing screen');
       
-      // 尝试截图来强制刷新画面
-      emulator.screenshot();
+      // Try to take a screenshot to force refresh
+      try {
+        mgbaRef.current.screenshot();
+      } catch (e) {
+        console.warn('Screenshot failed:', e);
+      }
       
-      // 暂停并恢复以刷新画面
-      emulator.pause();
+      // Pause and resume to force redraw
+      pauseGame();
+      
       setTimeout(() => {
-        emulator.start();
+        // Make sure canvas size is set correctly
+        if (canvasRef.current) {
+          canvasRef.current.width = 240;
+          canvasRef.current.height = 160;
+          
+          // Update canvas size in module
+          if (typeof mgbaRef.current.setCanvasSize === 'function') {
+            mgbaRef.current.setCanvasSize(240, 160);
+          }
+        }
+        
+        startGame();
         console.log('Screen refresh completed');
       }, 100);
-    } catch (err) {
-      console.error('Error refreshing screen:', err);
+    } catch (error) {
+      console.error('Failed to refresh screen:', error);
     }
   };
-
-  // Set up keyboard controls
-  useEffect(() => {
-    if (!emulator || !romLoaded) return;
-
-    try {
-      console.log('Setting up keyboard controls with keys:', Object.keys(KEY_BINDINGS));
-
-      const handleKeyDown = (e: KeyboardEvent) => {
-        const key = KEY_BINDINGS[e.key as keyof typeof KEY_BINDINGS];
-        if (key !== undefined) {
-          console.log(`Key down: ${e.key} -> ${key}`);
-          emulator.buttonPress(key);
-          e.preventDefault();
-        }
-      };
-
-      const handleKeyUp = (e: KeyboardEvent) => {
-        const key = KEY_BINDINGS[e.key as keyof typeof KEY_BINDINGS];
-        if (key !== undefined) {
-          console.log(`Key up: ${e.key} -> ${key}`);
-          emulator.buttonUnpress(key);
-          e.preventDefault();
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('keyup', handleKeyUp);
-
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('keyup', handleKeyUp);
-      };
-    } catch (err) {
-      console.error('Error setting up keyboard controls:', err);
-    }
-  }, [emulator, romLoaded]);
-
+  
   return (
     <div className="emulator-container">
-      <h1>GBA4Browser</h1>
-      <p>A web-based Game Boy Advance emulator</p>
+      <div className="emulator-canvas-container">
+        <canvas 
+          ref={canvasRef} 
+          id="gba-canvas"
+          width="240"
+          height="160"
+          style={{
+            display: 'block',
+            margin: '0 auto',
+          }}
+        />
+        {/* 这个div将叠加在canvas上，用于显示任何错误信息 */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            fontSize: '14px',
+            color: 'white',
+            textShadow: '1px 1px 2px black',
+          }}
+        >
+          {!isGameLoaded && !isLoading && 'Please load a ROM'}
+          {isLoading && 'Loading...'}
+        </div>
+      </div>
       
-      {error && <p className="error">{error}</p>}
-      {romLoadError && <p className="error">{romLoadError}</p>}
-      {isLoading ? <LoadingSpinner /> : null}
+      {errorMessage && (
+        <div className="error-message">
+          <p>{errorMessage}</p>
+        </div>
+      )}
       
-      <canvas 
-        ref={canvasRef} 
-        className="gba-canvas" 
-        style={{ 
-          width: '480px',  // 2x 缩放显示
-          height: '320px', // 2x 缩放显示
-          imageRendering: 'pixelated' 
-        }}
-      />
-      
-      <div className="controls">
-        <div className="file-input">
+      <div className="emulator-controls">
+        <div className="file-control">
           <input
             type="file"
             accept=".gba"
             onChange={handleFileUpload}
-            disabled={isLoading || !emulator}
+            disabled={isLoading || !isInitialized}
           />
         </div>
         
-        <div className="buttons">
-          <button 
-            onClick={togglePause} 
-            disabled={isLoading || !emulator || !romLoaded}
+        <div className="game-controls">
+          <button
+            onClick={togglePause}
+            disabled={!isGameLoaded || isLoading}
           >
             {isPaused ? '继续' : '暂停'}
           </button>
-          <button 
-            onClick={reset} 
-            disabled={isLoading || !emulator || !romLoaded}
+          
+          <button
+            onClick={resetGame}
+            disabled={!isGameLoaded || isLoading}
           >
             重置
           </button>
-          <button 
-            onClick={forceRefresh} 
-            disabled={isLoading || !emulator || !romLoaded}
+          
+          <button
+            onClick={refreshScreen}
+            disabled={!isGameLoaded || isLoading}
           >
             刷新画面
           </button>
@@ -280,17 +369,6 @@ const GBAEmulator: React.FC = () => {
         <p>开始: Enter</p>
         <p>选择: Backspace</p>
       </div>
-      
-      {romLoaded && (
-        <div className="debug-info">
-          <h4>调试信息:</h4>
-          <p>ROM 已加载: {romLoaded ? '是' : '否'}</p>
-          <p>暂停状态: {isPaused ? '是' : '否'}</p>
-          <p>当前文件: {lastLoadedFile.current?.name || '无'}</p>
-          <p>音量: {emulator?.getVolume() || 0}</p>
-          <p>快进倍率: {emulator?.getFastForward() || 1}</p>
-        </div>
-      )}
     </div>
   );
 };

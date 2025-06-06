@@ -18,14 +18,15 @@ const safeCall = (obj: any, method: string, ...args: any[]) => {
 // 扩展 mGBA 配置接口
 interface MGBAConfig {
   canvas: HTMLCanvasElement;
-  locateFile?: (path: string, prefix: string) => string;
+  locateFile?: (path: string, prefix?: string) => string;
   onRuntimeInitialized?: () => void;
   print?: (text: string) => void;
   printErr?: (text: string) => void;
   audioSampleRate: number;
   audioBufferSize: number;
   frameskip: number;
-  disableGL: boolean;
+  // 直接传递 GL 上下文到模块
+  GL?: WebGLRenderingContext;
 }
 
 export const useEmulator = (canvas: HTMLCanvasElement | null) => {
@@ -62,15 +63,28 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
           setIsLoading(true);
           console.log('Initializing mGBA...');
           
+          // 预先创建 WebGL 上下文
+          let gl: WebGLRenderingContext | null = null;
+          try {
+            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl') as WebGLRenderingContext;
+            if (gl) {
+              console.log('WebGL context created successfully');
+            } else {
+              console.warn('Failed to create WebGL context, falling back to 2D');
+            }
+          } catch (err) {
+            console.error('Error creating WebGL context:', err);
+          }
+          
           // 使用自定义配置初始化 mGBA
           const config = {
             canvas,
-            locateFile: (path: string, prefix: string) => {
+            locateFile: (path: string, prefix?: string) => {
               if (path.endsWith('.wasm')) {
                 console.log('Loading WebAssembly from:', wasmBinaryFile);
                 return wasmBinaryFile;
               }
-              return prefix + path;
+              return prefix ? prefix + path : path;
             },
             // 添加更多调试信息
             onRuntimeInitialized: () => {
@@ -87,23 +101,43 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
             audioBufferSize: 1024,
             // 添加视频配置
             frameskip: 0,
-            // 禁用 GL
-            disableGL: true
+            // 将预先创建的 WebGL 上下文传递给模块
+            GL: gl || undefined
           };
           
           const Module = await mGBA(config);
+          
+          // 确保创建正确的上下文
+          if (typeof (Module as any).createContext === 'function') {
+            try {
+              console.log('Creating context with Module.createContext');
+              (Module as any).createContext(canvas, true, true);
+            } catch (err) {
+              console.error('Error creating context:', err);
+            }
+          }
 
-          const mGBAVersion =
-            Module.version.projectName + ' ' + Module.version.projectVersion;
+          // 安全地访问 Module.version
+          let mGBAVersion = 'Unknown';
+          if (Module.version && typeof Module.version === 'object') {
+            const versionObj = Module.version as any;
+            if (versionObj.projectName && versionObj.projectVersion) {
+              mGBAVersion = `${versionObj.projectName} ${versionObj.projectVersion}`;
+            }
+          }
           console.log('Emulator version:', mGBAVersion);
 
           console.log('Initializing file system...');
-          await Module.FSInit();
-          console.log('File system initialized successfully');
+          if (typeof Module.FSInit === 'function') {
+            await Module.FSInit();
+            console.log('File system initialized successfully');
+          } else {
+            console.log('FSInit method not available, skipping file system initialization');
+          }
           
           // 检查模块上可用的方法
           console.log('Available methods on Module:', Object.keys(Module).filter(
-            key => typeof Module[key] === 'function'
+            key => typeof (Module as any)[key] === 'function'
           ));
           
           // 创建包装器
