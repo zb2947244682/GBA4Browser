@@ -4,7 +4,7 @@ export default {
   input: 'src/mgba.js',
   output: {
     file: 'dist/mgba.bundle.js',
-    format: 'iife',
+    format: 'umd',
     name: 'mGBA'
   },
   plugins: [nodeResolve()]
