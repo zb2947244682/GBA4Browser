@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>mGBA Ultra Simple Test</title>
+  <meta charset="UTF-8">
+  <style>
+    body { 
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    canvas { 
+      border: 5px solid lime; 
+      background: black;
+      width: 480px;
+      height: 320px;
+    }
+    #controls {
+      margin: 15px 0;
+    }
+    button, input {
+      margin: 5px;
+      padding: 8px;
+      font-size: 16px;
+    }
+    pre {
+      background: #111;
+      border: 1px solid #333;
+      padding: 10px;
+      width: 100%;
+      max-width: 600px;
+      height: 200px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+  </style>
+  <script src="/node_modules/@thenick775/mgba-wasm/dist/mgba.js"></script>
+</head>
+<body>
+  <h1>mGBA Ultra Simple Test</h1>
+  
+  <canvas id="output" width="240" height="160"></canvas>
+  
+  <div id="controls">
+    <input type="file" id="rom" accept=".gba">
+    <button onclick="startGame()">Start</button>
+    <button onclick="pauseGame()">Pause</button>
+    <button onclick="refresh()">Refresh</button>
+  </div>
+  
+  <pre id="log"></pre>
+  
+  <script>
+    const canvas = document.getElementById('output');
+    const romInput = document.getElementById('rom');
+    const logOutput = document.getElementById('log');
+    let module = null;
+    
+    function log(text) {
+      logOutput.textContent += text + '\n';
+      logOutput.scrollTop = logOutput.scrollHeight;
+      console.log(text);
+    }
+    
+    // 直接启动
+    async function init() {
+      log('初始化 mGBA...');
+      
+      try {
+        // 1. 极简配置
+        module = await mGBA({
+          canvas: canvas,
+          locateFile: (path) => {
+            if (path.endsWith('.wasm')) {
+              return '/mgba.wasm';
+            }
+            return path;
+          }
+        });
+        
+        log('mGBA 版本: ' + module.version.projectName + ' ' + module.version.projectVersion);
+        
+        // 2. 初始化文件系统
+        await module.FSInit();
+        log('文件系统初始化完成');
+        
+        // 3. 设置音量
+        if (module.setVolume) {
+          module.setVolume(100);
+          log('音量设置为 100%');
+        }
+        
+        romInput.disabled = false;
+        log('初始化完成，请选择 ROM 文件');
+      } catch (err) {
+        log('初始化错误: ' + err);
+        console.error(err);
+      }
+    }
+    
+    function uploadROM(file) {
+      if (!module || !file) return;
+      
+      log('上传 ROM: ' + file.name);
+      
+      module.uploadRom(file, () => {
+        log('ROM 上传完成，点击 Start 开始游戏');
+      });
+    }
+    
+    function startGame() {
+      if (!module) return;
+      
+      log('启动游戏...');
+      
+      try {
+        // 尝试调用 main
+        if (module._main && typeof module._main === 'function') {
+          module._main();
+          log('调用了 _main 函数');
+        }
+        
+        // 开始主循环
+        module.resumeMainLoop();
+        log('主循环已恢复');
+        
+        // 恢复游戏和音频
+        module.resumeGame();
+        log('游戏已恢复');
+        
+        module.resumeAudio();
+        log('音频已恢复');
+        
+        // 强制更新一次画面
+        setTimeout(() => {
+          if (module.screenshot) {
+            module.screenshot();
+            log('已尝试截图刷新');
+          }
+        }, 500);
+      } catch (err) {
+        log('启动错误: ' + err);
+      }
+    }
+    
+    function pauseGame() {
+      if (!module) return;
+      
+      log('暂停游戏...');
+      
+      try {
+        module.pauseMainLoop();
+        module.pauseGame();
+        module.pauseAudio();
+        log('游戏已暂停');
+      } catch (err) {
+        log('暂停错误: ' + err);
+      }
+    }
+    
+    function refresh() {
+      if (!module) return;
+      
+      log('刷新画面...');
+      
+      try {
+        // 尝试截图强制刷新
+        if (module.screenshot) {
+          module.screenshot();
+        }
+        
+        // 试试先暂停再恢复
+        module.pauseMainLoop();
+        setTimeout(() => {
+          module.resumeMainLoop();
+          log('已尝试刷新画面');
+        }, 100);
+      } catch (err) {
+        log('刷新错误: ' + err);
+      }
+    }
+    
+    // 文件选择监听
+    romInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        uploadROM(e.target.files[0]);
+      }
+    });
+    
+    // 禁用文件选择直到初始化完成
+    romInput.disabled = true;
+    
+    // 启动!
+    init();
+  </script>
+</body>
+</html> 

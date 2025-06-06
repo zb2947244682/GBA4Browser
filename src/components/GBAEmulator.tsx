@@ -7,10 +7,6 @@ import { KEY_BINDINGS } from '../utils/mgbaWrapper';
 const GBA_WIDTH = 240;
 const GBA_HEIGHT = 160;
 
-// 显示尺寸（2倍缩放）
-const DISPLAY_WIDTH = GBA_WIDTH;
-const DISPLAY_HEIGHT = GBA_HEIGHT;
-
 const GBAEmulator: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [romLoaded, setRomLoaded] = useState(false);
@@ -25,6 +21,11 @@ const GBAEmulator: React.FC = () => {
   // 当 canvasRef.current 可用时，设置 canvas 状态
   useEffect(() => {
     if (canvasRef.current) {
+      // 确保 canvas 元素使用原始尺寸
+      canvasRef.current.width = GBA_WIDTH;
+      canvasRef.current.height = GBA_HEIGHT;
+      
+      // 设置 canvas 状态
       setCanvas(canvasRef.current);
     }
   }, []);
@@ -81,6 +82,10 @@ const GBAEmulator: React.FC = () => {
         // 启动游戏
         try {
           console.log('Starting game...');
+          
+          // 确保 canvas 尺寸正确设置
+          emulator.setCanvasSize(GBA_WIDTH, GBA_HEIGHT);
+          
           emulator.start();
           setRomLoaded(true);
           setIsPaused(false);
@@ -88,6 +93,9 @@ const GBAEmulator: React.FC = () => {
           // 检查游戏是否真的在运行
           setTimeout(() => {
             console.log('Game should be running now');
+            
+            // 强制刷新一次画面
+            forceRefresh();
           }, 1000);
         } catch (err) {
           console.error('Error starting game:', err);
@@ -132,6 +140,9 @@ const GBAEmulator: React.FC = () => {
         emulator.start();
         setIsPaused(false);
       }
+      
+      // 强制刷新画面
+      setTimeout(forceRefresh, 500);
     } catch (err) {
       console.error('Error resetting game:', err);
       
@@ -142,6 +153,9 @@ const GBAEmulator: React.FC = () => {
           console.log('ROM reloaded successfully');
           emulator.start();
           setIsPaused(false);
+          
+          // 强制刷新画面
+          setTimeout(forceRefresh, 500);
         });
       }
     }
@@ -217,8 +231,11 @@ const GBAEmulator: React.FC = () => {
       <canvas 
         ref={canvasRef} 
         className="gba-canvas" 
-        width={DISPLAY_WIDTH} 
-        height={DISPLAY_HEIGHT}
+        style={{ 
+          width: '480px',  // 2x 缩放显示
+          height: '320px', // 2x 缩放显示
+          imageRendering: 'pixelated' 
+        }}
       />
       
       <div className="controls">

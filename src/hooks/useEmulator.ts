@@ -22,6 +22,10 @@ interface MGBAConfig {
   onRuntimeInitialized?: () => void;
   print?: (text: string) => void;
   printErr?: (text: string) => void;
+  audioSampleRate: number;
+  audioBufferSize: number;
+  frameskip: number;
+  disableGL: boolean;
 }
 
 export const useEmulator = (canvas: HTMLCanvasElement | null) => {
@@ -77,7 +81,14 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
             },
             printErr: (text: string) => {
               console.error('mGBA stderr:', text);
-            }
+            },
+            // 添加音频配置
+            audioSampleRate: 44100,
+            audioBufferSize: 1024,
+            // 添加视频配置
+            frameskip: 0,
+            // 禁用 GL
+            disableGL: true
           };
           
           const Module = await mGBA(config);
@@ -97,6 +108,9 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
           
           // 创建包装器
           const wrapper = createMgbaWrapper(Module);
+          
+          // 设置音量
+          wrapper.setVolume(100);
           
           setEmulator(wrapper);
           console.log('Emulator initialized successfully');
