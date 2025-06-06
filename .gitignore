@@ -10,7 +10,7 @@ package-lock.json
 yarn.lock
 
 # 忽略编译生成的文件
-/dist/
+/dist
 /build/
 /gbajs3
 
