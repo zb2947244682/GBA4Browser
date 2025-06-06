@@ -26,12 +26,18 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  position: relative;
 }
 
 .gba-canvas {
   border: 2px solid #646cff;
   border-radius: 4px;
   image-rendering: pixelated;
+  background-color: #000;
+  width: 480px;  /* 2x scale */
+  height: 320px; /* 2x scale */
+  display: block;
+  margin: 0 auto;
 }
 
 .controls {
@@ -39,6 +45,12 @@ body {
   flex-direction: column;
   gap: 1rem;
   margin-top: 1rem;
+}
+
+.buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
 }
 
 .file-input {
@@ -66,11 +78,24 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .loading-spinner {
   display: flex;
   flex-direction: column;
   align-items: center;
   margin: 2rem 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 2rem;
+  border-radius: 8px;
 }
 
 .spinner {
@@ -100,4 +125,39 @@ button:focus-visible {
   margin: 1rem 0;
   max-width: 100%;
   word-break: break-word;
+}
+
+.instructions {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: rgba(100, 108, 255, 0.1);
+  border-radius: 4px;
+  text-align: left;
+  max-width: 400px;
+}
+
+.instructions h3 {
+  margin-top: 0;
+  color: #646cff;
+}
+
+.instructions p {
+  margin: 0.5rem 0;
+}
+
+.debug-info {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  text-align: left;
+  font-family: monospace;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.debug-info h4 {
+  margin-top: 0;
+  color: #646cff;
 } 

@@ -1,12 +1,31 @@
-import mGBA, { type mGBAEmulator } from '@thenick775/mgba-wasm';
+import mGBA from '@thenick775/mgba-wasm';
 import { useEffect, useState } from 'react';
+import { createMgbaWrapper, type MgbaWrapper } from '../utils/mgbaWrapper';
 
 // 确保 WebAssembly 模块加载的路径是正确的
 // 由于我们已经将 wasm 文件复制到了 public 目录，Vite 会自动处理这个路径
 const wasmBinaryFile = '/mgba.wasm';
 
+// 安全地检查方法是否存在
+const safeCall = (obj: any, method: string, ...args: any[]) => {
+  if (obj && typeof obj[method] === 'function') {
+    return obj[method](...args);
+  }
+  console.warn(`Method ${method} not found on object`);
+  return undefined;
+};
+
+// 扩展 mGBA 配置接口
+interface MGBAConfig {
+  canvas: HTMLCanvasElement;
+  locateFile?: (path: string, prefix: string) => string;
+  onRuntimeInitialized?: () => void;
+  print?: (text: string) => void;
+  printErr?: (text: string) => void;
+}
+
 export const useEmulator = (canvas: HTMLCanvasElement | null) => {
-  const [emulator, setEmulator] = useState<mGBAEmulator | null>(null);
+  const [emulator, setEmulator] = useState<MgbaWrapper | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,16 +59,28 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
           console.log('Initializing mGBA...');
           
           // 使用自定义配置初始化 mGBA
-          const Module = await mGBA({ 
-            canvas, 
+          const config = {
+            canvas,
             locateFile: (path: string, prefix: string) => {
               if (path.endsWith('.wasm')) {
                 console.log('Loading WebAssembly from:', wasmBinaryFile);
                 return wasmBinaryFile;
               }
               return prefix + path;
-            } 
-          });
+            },
+            // 添加更多调试信息
+            onRuntimeInitialized: () => {
+              console.log('Runtime initialized');
+            },
+            print: (text: string) => {
+              console.log('mGBA stdout:', text);
+            },
+            printErr: (text: string) => {
+              console.error('mGBA stderr:', text);
+            }
+          };
+          
+          const Module = await mGBA(config);
 
           const mGBAVersion =
             Module.version.projectName + ' ' + Module.version.projectVersion;
@@ -59,8 +90,17 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
           await Module.FSInit();
           console.log('File system initialized successfully');
           
-          setEmulator(Module);
+          // 检查模块上可用的方法
+          console.log('Available methods on Module:', Object.keys(Module).filter(
+            key => typeof Module[key] === 'function'
+          ));
+          
+          // 创建包装器
+          const wrapper = createMgbaWrapper(Module);
+          
+          setEmulator(wrapper);
           console.log('Emulator initialized successfully');
+          
         } catch (err) {
           console.error('Failed to initialize emulator:', err);
           setError('Failed to initialize emulator: ' + String(err));
@@ -77,10 +117,9 @@ export const useEmulator = (canvas: HTMLCanvasElement | null) => {
     // Cleanup function
     return () => {
       if (emulator) {
-        // Stop emulation if it's running
-        if (emulator.isRunning()) {
-          emulator.stop();
-        }
+        console.log('Stopping emulation on cleanup');
+        emulator.pause();
+        emulator.quit();
       }
     };
   }, [canvas]);
