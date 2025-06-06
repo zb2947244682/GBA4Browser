@@ -1,17 +1,12 @@
 const path = require('path');
+
 module.exports = {
-  entry: './dist/mgba.js',
+  entry: './src/mgba.js',
   output: {
+    filename: 'mgba.bundle.js',
     path: path.resolve(__dirname, 'dist'),
-    filename: 'bundle.js'
+    library: 'mGBA', // 导出为全局变量mGBA
+    libraryTarget: 'window'
   },
-  experiments: { asyncWebAssembly: true },
-  module: {
-    rules: [
-      {
-        test: /\.wasm$/,
-        type: 'asset/resource'
-      }
-    ]
-  }
+  mode: 'production'
 };
